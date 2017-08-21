@@ -44,7 +44,6 @@ public class DataBlocks {
     }
 
     public Block allocateBlock() throws IOException {
-
         if (blockGroupsWithFreeBlocks.isEmpty()) {
             for (int i = 0; i < allocatedGroups; i++) {
                 final BlockGroup blockGroup = getBlockGroup(i);
@@ -75,8 +74,9 @@ public class DataBlocks {
     }
 
     public void deallocateBlock(final int blockAddress) throws IOException {
-        final BlockGroup blockGroup = getBlockGroup(blockAddress / groupSize);
-        blockGroup.deallocateBlock((blockAddress % groupSize) / blockSize);
+        final BlockGroup blockGroup = getBlockGroup(blockAddress / blocksInGroup);
+        blockGroup.deallocateBlock(blockAddress % blocksInGroup);
+
         if (blockGroupsWithFreeBlocks.size() < blockGroupsWithFreeBlocksCacheSize) {
             if (!blockGroupsWithFreeBlocks.containsKey(blockGroup.id)) {
                 blockGroupsWithFreeBlocks.put(blockGroup.id, blockGroup);
@@ -85,6 +85,7 @@ public class DataBlocks {
     }
 
     public Block getBlock(final int blockAddress) {
+        checkArgument(blockAddress > 0, "block address must be more than 0");
         //no allocation check
         return new Block(blockAddress);
     }
@@ -162,7 +163,7 @@ public class DataBlocks {
                     freeBlocks--;
                     updateBlockData(i, currentBlockFlags);
 
-                    return new Block(id * groupSize + i * blockSize);
+                    return new Block(id * blocksInGroup + i);
                 }
 
             }
@@ -172,6 +173,8 @@ public class DataBlocks {
 
 
         void deallocateBlock(final int blockId) throws IOException {
+            initFreeBlocksCounter();
+
             final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[blockId]);
             currentBlockFlags.setTaken(false);
             freeBlocks++;
@@ -199,6 +202,11 @@ public class DataBlocks {
                 freeBlocks = free;
             }
         }
+
+        @Override
+        public String toString() {
+            return "BlockGroup id=" + id + " " + (id * groupSize) + " " + ((id + 1) * groupSize - 1);
+        }
     }
 
     public class Block {
@@ -215,14 +223,37 @@ public class DataBlocks {
             return result;
         }
 
+        public int readInt(final int position) throws IOException {
+            checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
+
+            dataFile.seek(address * blockSize + position);
+            return dataFile.readInt();
+        }
+
         public void write(final byte[] bytes) throws IOException {
-            checkArgument(bytes.length < blockSize, "unexpected block size " + bytes.length);
+            checkArgument(bytes.length <= blockSize, "unexpected block size " + bytes.length);
+
             dataFile.seek(address * blockSize);
             dataFile.write(bytes);
         }
 
+        public void writeInt(final int position, final int value) throws IOException {
+            checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
+
+            dataFile.seek(address * blockSize + position);
+            dataFile.writeInt(value);
+        }
+
+        public void clear() throws IOException {
+            write(new byte[blockSize]);
+        }
+
         public int getAddress() {
             return address;
+        }
+
+        public int size() {
+            return blockSize;
         }
     }
 
