@@ -3,23 +3,23 @@ package sfvfs.internal;
 /**
  * @author alexey.kutuzov
  */
-public class Flags {
+class Flags {
 
-    public static class BlockGroupFlags {
+    static class BlockGroupFlags {
 
         private static final byte TAKEN = 0x1;
 
         private byte flags;
 
-        public BlockGroupFlags(final byte flags) {
+        BlockGroupFlags(final byte flags) {
             this.flags = flags;
         }
 
-        public boolean isTaken() {
+        boolean isTaken() {
             return (flags & TAKEN) == TAKEN;
         }
 
-        public void setTaken(final boolean taken) {
+        void setTaken(final boolean taken) {
             if (taken) {
                 flags |= TAKEN;
             } else {
@@ -27,25 +27,26 @@ public class Flags {
             }
         }
 
-        public byte value() {
+        byte value() {
             return flags;
         }
     }
 
-    public static class InodeFlags {
-        private int flags;
+    static class InodeFlags {
 
         private static final int NEED_EMPTY_BLOCK = 0x1;
 
-        public InodeFlags(final int flags) {
+        private int flags;
+
+        InodeFlags(final int flags) {
             this.flags = flags;
         }
 
-        public boolean needEmptyBlock() {
+        boolean isNeedEmptyBlock() {
             return (flags & NEED_EMPTY_BLOCK) == NEED_EMPTY_BLOCK;
         }
 
-        public void setNeedEmptyBlock(final boolean need) {
+        void setNeedEmptyBlock(final boolean need) {
             if (need) {
                 flags |= NEED_EMPTY_BLOCK;
             } else {
@@ -53,7 +54,7 @@ public class Flags {
             }
         }
 
-        public int value() {
+        int value() {
             return flags;
         }
 

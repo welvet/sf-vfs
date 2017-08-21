@@ -5,21 +5,19 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
-import static sfvfs.utils.Preconditions.checkArgument;
-import static sfvfs.utils.Preconditions.checkNotNull;
-import static sfvfs.utils.Preconditions.checkState;
+import static sfvfs.utils.Preconditions.*;
 
 /**
  * @author alexey.kutuzov
  */
-public class Inode {
+class Inode {
 
     private final DataBlocks dataBlocks;
     private final int nextInodeIndex;
 
     private final DataBlocks.Block rootBlock;
 
-    public Inode(final DataBlocks dataBlocks, final int address) throws IOException {
+    Inode(final DataBlocks dataBlocks, final int address) throws IOException {
         checkNotNull(dataBlocks, "dataBlocks");
         checkArgument(address > 0, "address must be more than 0: " + address);
 
@@ -29,19 +27,15 @@ public class Inode {
         this.nextInodeIndex = (rootBlock.size() / 4) - 1;
     }
 
-    public Flags.InodeFlags getFlags() throws IOException {
-        return new Flags.InodeFlags(this.rootBlock.readInt(0));
-    }
-
-    public int getSize() throws IOException {
+    int getSize() throws IOException {
         return this.rootBlock.readInt(4);
     }
 
-    public InputStream readStream() throws IOException {
+    InputStream readStream() throws IOException {
         return new InodeInputStream();
     }
 
-    public OutputStream appendStream() throws IOException {
+    OutputStream appendStream() throws IOException {
         DataBlocks.Block currentInodeBlock = rootBlock;
 
         while (true) {
@@ -75,7 +69,7 @@ public class Inode {
         final Flags.InodeFlags flags = getFlags();
         final int size = getSize();
 
-        if (flags.needEmptyBlock()) {
+        if (flags.isNeedEmptyBlock()) {
             dataBlockIndexInInode++;
             lastDataBlockAddress = dataBlocks.allocateBlock().getAddress();
         }
@@ -90,16 +84,20 @@ public class Inode {
         );
     }
 
-    public void clear() throws IOException {
+    void clear() throws IOException {
         clear(false);
     }
 
-    public void delete() throws IOException {
+    void delete() throws IOException {
         clear(true);
     }
 
     int debugGetNextInode() throws IOException {
         return rootBlock.readInt(nextInodeIndex * 4);
+    }
+
+    private Flags.InodeFlags getFlags() throws IOException {
+        return new Flags.InodeFlags(this.rootBlock.readInt(0));
     }
 
     private void clear(final boolean removeRootInode) throws IOException {
@@ -135,6 +133,31 @@ public class Inode {
         } else {
             rootBlock.clear();
         }
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder result = new StringBuilder();
+
+        result.append("Inode [address = ").append(rootBlock.getAddress()).append("] ");
+
+        try {
+            final ByteBuffer byteBuffer = ByteBuffer.wrap(rootBlock.read());
+
+            result.append(new Flags.InodeFlags(byteBuffer.getInt(0)));
+
+            result.append(" size:").append(byteBuffer.getInt(4)).append(" ");
+
+            for (int i = 2; i < nextInodeIndex; i++) {
+                result.append(byteBuffer.getInt(i * 4)).append(" ");
+            }
+
+            result.append(" next:").append(byteBuffer.getInt(nextInodeIndex * 4)).append(" ");
+        } catch (final IOException e) {
+            result.append("сan't construct toString:").append(e.getMessage());
+        }
+
+        return result.toString();
     }
 
     private class InodeInputStream extends InputStream {
@@ -278,30 +301,5 @@ public class Inode {
                 dataBlockIndexInInode = 2;
             }
         }
-    }
-
-    @Override
-    public String toString() {
-        final StringBuilder result = new StringBuilder();
-
-        result.append("Inode [address = ").append(rootBlock.getAddress()).append("] ");
-
-        try {
-            final ByteBuffer byteBuffer = ByteBuffer.wrap(rootBlock.read());
-
-            result.append(new Flags.InodeFlags(byteBuffer.getInt(0)));
-
-            result.append(" size:").append(byteBuffer.getInt(4)).append(" ");
-
-            for (int i = 2; i < nextInodeIndex; i++) {
-                result.append(byteBuffer.getInt(i * 4)).append(" ");
-            }
-
-            result.append(" next:").append(byteBuffer.getInt(nextInodeIndex * 4)).append(" ");
-        } catch (final IOException e) {
-            result.append("сan't construct toString:").append(e.getMessage());
-        }
-
-        return result.toString();
     }
 }

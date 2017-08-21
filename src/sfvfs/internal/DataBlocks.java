@@ -11,7 +11,7 @@ import static sfvfs.utils.Preconditions.*;
 /**
  * @author alexey.kutuzov
  */
-public class DataBlocks {
+class DataBlocks {
 
     private static final int DEFAULT_BLOCK_SIZE = 4 * 1024;
     private static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 100;
@@ -43,7 +43,7 @@ public class DataBlocks {
         this.blockGroupsWithFreeBlocksCacheSize = blockGroupsWithFreeBlocksCacheSize;
     }
 
-    public Block allocateBlock() throws IOException {
+    Block allocateBlock() throws IOException {
         if (blockGroupsWithFreeBlocks.isEmpty()) {
             for (int i = 0; i < allocatedGroups; i++) {
                 final BlockGroup blockGroup = getBlockGroup(i);
@@ -73,7 +73,7 @@ public class DataBlocks {
 
     }
 
-    public void deallocateBlock(final int blockAddress) throws IOException {
+    void deallocateBlock(final int blockAddress) throws IOException {
         final BlockGroup blockGroup = getBlockGroup(blockAddress / blocksInGroup);
         blockGroup.deallocateBlock(blockAddress % blocksInGroup);
 
@@ -84,17 +84,17 @@ public class DataBlocks {
         }
     }
 
-    public Block getBlock(final int blockAddress) {
+    Block getBlock(final int blockAddress) {
         checkArgument(blockAddress > 0, "block address must be more than 0");
         //no allocation check
         return new Block(blockAddress);
     }
 
-    public int debugGetTotalBlocks() throws IOException {
+    int debugGetTotalBlocks() throws IOException {
         return allocatedGroups * blocksInGroup;
     }
 
-    public int debugGetFreeBlocks() throws IOException {
+    int debugGetFreeBlocks() throws IOException {
         int result = 0;
         for (int i = 0; i < allocatedGroups; i++) {
             result += getBlockGroup(i).getFreeBlocks();
@@ -209,50 +209,50 @@ public class DataBlocks {
         }
     }
 
-    public class Block {
+    class Block {
         private final int address;
 
         private Block(final int address) {
             this.address = address;
         }
 
-        public byte[] read() throws IOException {
+        byte[] read() throws IOException {
             dataFile.seek(address * blockSize);
             final byte[] result = new byte[blockSize];
             dataFile.read(result);
             return result;
         }
 
-        public int readInt(final int position) throws IOException {
+        int readInt(final int position) throws IOException {
             checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
 
             dataFile.seek(address * blockSize + position);
             return dataFile.readInt();
         }
 
-        public void write(final byte[] bytes) throws IOException {
+        void write(final byte[] bytes) throws IOException {
             checkArgument(bytes.length <= blockSize, "unexpected block size " + bytes.length);
 
             dataFile.seek(address * blockSize);
             dataFile.write(bytes);
         }
 
-        public void writeInt(final int position, final int value) throws IOException {
+        void writeInt(final int position, final int value) throws IOException {
             checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
 
             dataFile.seek(address * blockSize + position);
             dataFile.writeInt(value);
         }
 
-        public void clear() throws IOException {
+        void clear() throws IOException {
             write(new byte[blockSize]);
         }
 
-        public int getAddress() {
+        int getAddress() {
             return address;
         }
 
-        public int size() {
+        int size() {
             return blockSize;
         }
     }
