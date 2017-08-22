@@ -11,15 +11,15 @@ public class Preconditions {
         }
     }
 
-    public static void checkArgument(final boolean argsCorrect, final String errors) {
+    public static void checkArgument(final boolean argsCorrect, final String template, final Object... args){
         if (!argsCorrect) {
-            throw new IllegalArgumentException(errors);
+            throw new IllegalArgumentException(String.format(template, args));
         }
     }
 
-    public static void checkState(final boolean stateCorrect, final String errors) {
+    public static void checkState(final boolean stateCorrect, final String template, final Object... args ) {
         if (!stateCorrect) {
-            throw new IllegalStateException(errors);
+            throw new IllegalStateException(String.format(template, args));
         }
     }
 

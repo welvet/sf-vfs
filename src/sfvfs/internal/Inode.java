@@ -1,5 +1,8 @@
 package sfvfs.internal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -12,57 +15,68 @@ import static sfvfs.utils.Preconditions.*;
  */
 class Inode {
 
-    private final DataBlocks dataBlocks;
-    private final int nextInodeIndex;
+    private final static int NULL_POINTER = 0;
+    private final static int PTRLEN = 4;
 
-    private final DataBlocks.Block rootBlock;
+    private final static int FLAGS_IDX = 0;
+    private final static int SIZE_IDX = 1;
+    private final static int LAST_INODE_IDX = 2;
+    private final static int FIRST_DATA_BLOCK_IDX = 3;
+
+    private static final Logger log = LoggerFactory.getLogger(Inode.class);
+
+    private final DataBlocks dataBlocks;
+    private final int nextInodeBlockIndex;
+
+    private final DataBlocks.Block rootInodeBlock;
 
     Inode(final DataBlocks dataBlocks, final int address) throws IOException {
         checkNotNull(dataBlocks, "dataBlocks");
-        checkArgument(address > 0, "address must be more than 0: " + address);
+        checkArgument(address > 0, "address must be more than 0: %s", address);
 
         this.dataBlocks = dataBlocks;
-        this.rootBlock = dataBlocks.getBlock(address);
+        this.rootInodeBlock = dataBlocks.getBlock(address);
 
-        this.nextInodeIndex = (rootBlock.size() / 4) - 1;
+        this.nextInodeBlockIndex = (rootInodeBlock.size() / PTRLEN) - 1;
     }
 
     int getSize() throws IOException {
-        return this.rootBlock.readInt(4);
+        return this.rootInodeBlock.readInt(SIZE_IDX * PTRLEN);
     }
 
     InputStream readStream() throws IOException {
+        checkLockedAndLock();
+
+        log.debug("IS open inode {}", Inode.this);
         return new InodeInputStream();
     }
 
     OutputStream appendStream() throws IOException {
-        DataBlocks.Block currentInodeBlock = rootBlock;
+        checkLockedAndLock();
 
-        while (true) {
-            final int nextAddress = currentInodeBlock.readInt(4 * nextInodeIndex);
-            if (nextAddress != 0) {
-                currentInodeBlock = dataBlocks.getBlock(nextAddress);
-            } else {
-                break;
-            }
+        DataBlocks.Block lastInodeBlock = rootInodeBlock;
+
+        final int lastInodeAddress = rootInodeBlock.readInt(LAST_INODE_IDX * PTRLEN);
+        if (lastInodeAddress != NULL_POINTER) {
+            lastInodeBlock = dataBlocks.getBlock(lastInodeAddress);
         }
 
-        final ByteBuffer currentInodeBlockData = ByteBuffer.wrap(currentInodeBlock.read());
+        final ByteBuffer lastInodeBlockData = ByteBuffer.wrap(lastInodeBlock.read());
 
-        int lastDataBlockAddress = 0;
-        int dataBlockIndexInInode = 0;
-        for (int i = 2; i < nextInodeIndex; i++) {
-            final int nextAddress = currentInodeBlockData.getInt(i * 4);
-            if (nextAddress != 0) {
+        int lastDataBlockAddress = NULL_POINTER;
+        int lastDataBlockIndexInInode = 0;
+        for (int i = FIRST_DATA_BLOCK_IDX; i < nextInodeBlockIndex; i++) {
+            final int nextAddress = lastInodeBlockData.getInt(i * PTRLEN);
+            if (nextAddress != NULL_POINTER) {
                 lastDataBlockAddress = nextAddress;
-                dataBlockIndexInInode = i;
+                lastDataBlockIndexInInode = i;
             } else {
                 break;
             }
         }
 
-        if (lastDataBlockAddress == 0) {
-            dataBlockIndexInInode = 2;
+        if (lastDataBlockAddress == NULL_POINTER) {
+            lastDataBlockIndexInInode = FIRST_DATA_BLOCK_IDX;
             lastDataBlockAddress = dataBlocks.allocateBlock().getAddress();
         }
 
@@ -70,17 +84,17 @@ class Inode {
         final int size = getSize();
 
         if (flags.isNeedEmptyBlock()) {
-            dataBlockIndexInInode++;
+            lastDataBlockIndexInInode++;
             lastDataBlockAddress = dataBlocks.allocateBlock().getAddress();
         }
 
         return new InodeOutputStream(
                 size,
-                currentInodeBlock,
-                currentInodeBlockData,
-                dataBlockIndexInInode,
+                lastInodeBlock,
+                lastInodeBlockData,
+                lastDataBlockIndexInInode,
                 dataBlocks.getBlock(lastDataBlockAddress),
-                size % currentInodeBlock.size()
+                size % lastInodeBlock.size()
         );
     }
 
@@ -92,67 +106,86 @@ class Inode {
         clear(true);
     }
 
-    int debugGetNextInode() throws IOException {
-        return rootBlock.readInt(nextInodeIndex * 4);
+    int debugGetNextInodeAddress() throws IOException {
+        return rootInodeBlock.readInt(nextInodeBlockIndex * PTRLEN);
     }
 
     private Flags.InodeFlags getFlags() throws IOException {
-        return new Flags.InodeFlags(this.rootBlock.readInt(0));
+        return new Flags.InodeFlags(this.rootInodeBlock.readInt(FLAGS_IDX * PTRLEN));
     }
 
     private void clear(final boolean removeRootInode) throws IOException {
-        DataBlocks.Block currentInodeBlock = rootBlock;
+        DataBlocks.Block currentInodeBlock = rootInodeBlock;
 
         while (true) {
-            final ByteBuffer byteBuffer = ByteBuffer.wrap(currentInodeBlock.read());
+            final ByteBuffer currentInodeBlockData = ByteBuffer.wrap(currentInodeBlock.read());
 
-            for (int i = 2; i < nextInodeIndex; i++) {
-                final int dataBlockIndex = byteBuffer.getInt(i * 4);
+            for (int i = FIRST_DATA_BLOCK_IDX; i < nextInodeBlockIndex; i++) {
+                final int dataBlockAddress = currentInodeBlockData.getInt(i * PTRLEN);
 
-                if (dataBlockIndex != 0) {
-                    dataBlocks.deallocateBlock(dataBlockIndex);
+                if (dataBlockAddress != NULL_POINTER) {
+                    dataBlocks.deallocateBlock(dataBlockAddress);
+                    log.debug("inode {} clear data block cleared {}", rootInodeBlock.getAddress(), dataBlockAddress);
                 } else {
                     break;
                 }
             }
 
-            final int nextInodeAddress = byteBuffer.getInt(nextInodeIndex * 4);
-            if (currentInodeBlock != rootBlock) {
+            final int nextInodeAddress = currentInodeBlockData.getInt(nextInodeBlockIndex * PTRLEN);
+            if (currentInodeBlock != rootInodeBlock) {
                 dataBlocks.deallocateBlock(currentInodeBlock.getAddress());
+                log.debug("inode {} clear inode block cleared {}", rootInodeBlock.getAddress(), nextInodeAddress);
             }
 
-            if (nextInodeAddress != 0) {
+            if (nextInodeAddress != NULL_POINTER) {
                 currentInodeBlock = dataBlocks.getBlock(nextInodeAddress);
+                log.debug("inode {} clear inode block loaded {}", rootInodeBlock.getAddress(), nextInodeAddress);
             } else {
                 break;
             }
         }
 
         if (removeRootInode) {
-            dataBlocks.deallocateBlock(rootBlock.getAddress());
+            dataBlocks.deallocateBlock(rootInodeBlock.getAddress());
         } else {
-            rootBlock.clear();
+            rootInodeBlock.clear();
         }
+
+        log.debug("inode {} cleared remove root:{}", rootInodeBlock.getAddress(), removeRootInode);
+    }
+
+    private void checkLockedAndLock() throws IOException {
+        final Flags.InodeFlags flags = getFlags();
+        checkState(!flags.isLocked(), "inode %s already locked, unlock first", rootInodeBlock.getAddress());
+        flags.setLocked(true);
+        rootInodeBlock.writeInt(FLAGS_IDX * PTRLEN, flags.value());
+    }
+
+    private void unlock() throws IOException {
+        final Flags.InodeFlags flags = getFlags();
+        checkState(flags.isLocked(), "inode %s was not locked", rootInodeBlock.getAddress());
+        flags.setLocked(false);
+        rootInodeBlock.writeInt(FLAGS_IDX * PTRLEN, flags.value());
     }
 
     @Override
     public String toString() {
         final StringBuilder result = new StringBuilder();
 
-        result.append("Inode [address = ").append(rootBlock.getAddress()).append("] ");
+        result.append("Inode [address = ").append(rootInodeBlock.getAddress()).append("] ");
 
         try {
-            final ByteBuffer byteBuffer = ByteBuffer.wrap(rootBlock.read());
+            final ByteBuffer byteBuffer = ByteBuffer.wrap(rootInodeBlock.read());
 
-            result.append(new Flags.InodeFlags(byteBuffer.getInt(0)));
+            result.append(" flags:").append(new Flags.InodeFlags(byteBuffer.getInt(FLAGS_IDX * PTRLEN)));
+            result.append(" size:").append(byteBuffer.getInt(SIZE_IDX * PTRLEN));
+            result.append(" last:").append(byteBuffer.getInt(LAST_INODE_IDX * PTRLEN)).append(" ");
 
-            result.append(" size:").append(byteBuffer.getInt(4)).append(" ");
-
-            for (int i = 2; i < nextInodeIndex; i++) {
-                result.append(byteBuffer.getInt(i * 4)).append(" ");
+            for (int i = FIRST_DATA_BLOCK_IDX; i < nextInodeBlockIndex; i++) {
+                result.append(byteBuffer.getInt(i * PTRLEN)).append(" ");
             }
 
-            result.append(" next:").append(byteBuffer.getInt(nextInodeIndex * 4)).append(" ");
+            result.append(" next:").append(byteBuffer.getInt(nextInodeBlockIndex * PTRLEN)).append(" ");
         } catch (final IOException e) {
             result.append("сan't construct toString:").append(e.getMessage());
         }
@@ -163,16 +196,16 @@ class Inode {
     private class InodeInputStream extends InputStream {
 
         private ByteBuffer currentInodeBlockData;
-        private int currentDataIndexBlockInInode = 1;
+        private int currentDataIndexBlockInInode = FIRST_DATA_BLOCK_IDX;
 
         private byte[] currentDataBlockData;
-        private int currentDataIndex;
+        private int currentDataArrayIndex;
 
         private int sizeLeft;
 
         private InodeInputStream() throws IOException {
-            currentInodeBlockData = ByteBuffer.wrap(rootBlock.read());
-            sizeLeft = currentInodeBlockData.getInt(4);
+            currentInodeBlockData = ByteBuffer.wrap(rootInodeBlock.read());
+            sizeLeft = currentInodeBlockData.getInt(SIZE_IDX * PTRLEN);
         }
 
         @Override
@@ -182,24 +215,32 @@ class Inode {
             }
 
             if (currentDataBlockData == null) {
-                int nextAddress = currentInodeBlockData.getInt(++currentDataIndexBlockInInode * 4);
+                int nextAddress = currentInodeBlockData.getInt(currentDataIndexBlockInInode * PTRLEN);
 
-                if (currentDataIndexBlockInInode == nextInodeIndex) {
+                if (currentDataIndexBlockInInode == nextInodeBlockIndex) {
                     currentInodeBlockData = ByteBuffer.wrap(dataBlocks.getBlock(nextAddress).read());
-                    currentDataIndexBlockInInode = 2;
-                    nextAddress = currentInodeBlockData.getInt(currentDataIndexBlockInInode * 4);
+                    currentDataIndexBlockInInode = FIRST_DATA_BLOCK_IDX;
+                    log.debug("IS inode {} inode block open {}", rootInodeBlock.getAddress(), nextAddress);
+                    nextAddress = currentInodeBlockData.getInt(currentDataIndexBlockInInode * PTRLEN);
                 }
+                currentDataIndexBlockInInode++;
 
-                currentDataIndex = 0;
+                currentDataArrayIndex = 0;
                 currentDataBlockData = dataBlocks.getBlock(nextAddress).read();
+                log.debug("IS inode {} data block open {}", rootInodeBlock.getAddress(), nextAddress);
             }
 
-            final byte result = currentDataBlockData[currentDataIndex++];
-            if (currentDataIndex == currentDataBlockData.length) {
+            final byte result = currentDataBlockData[currentDataArrayIndex++];
+            if (currentDataArrayIndex == currentDataBlockData.length) {
                 currentDataBlockData = null;
             }
 
-            return result;
+            return result & 0xFF;
+        }
+
+        @Override
+        public void close() throws IOException {
+            unlock();
         }
     }
 
@@ -222,6 +263,8 @@ class Inode {
                                   final int dataBlockIndexInInode,
                                   final DataBlocks.Block dataBlock,
                                   final int prevDataBlockIndex) throws IOException {
+            log.debug("OS open inode {}, size {}, last inode {} {}", rootInodeBlock.getAddress(), size, inodeBlock.getAddress(), Inode.this);
+
             this.size = size;
 
             this.inodeBlock = inodeBlock;
@@ -243,12 +286,14 @@ class Inode {
 
                 dataBlock.write(dataBlockData);
                 size += dataBlockIndex - currentDataBlockSavedSize;
-                inodeBlockData.putInt(dataBlockIndexInInode++ * 4, dataBlock.getAddress());
+                inodeBlockData.putInt(dataBlockIndexInInode++ * PTRLEN, dataBlock.getAddress());
 
                 dataBlock = dataBlocks.allocateBlock();
                 dataBlockData = new byte[dataBlock.size()];
                 currentDataBlockSavedSize = 0;
                 dataBlockIndex = 0;
+
+                log.debug("OS inode {} new data block {}", rootInodeBlock.getAddress(), dataBlock.getAddress());
             }
 
             dataBlockData[dataBlockIndex++] = (byte) b;
@@ -259,17 +304,19 @@ class Inode {
             checkState(inodeBlock != null, "stream closed");
 
             createNextInodeIfNecessary();
-            inodeBlockData.putInt(dataBlockIndexInInode * 4, dataBlock.getAddress());
+            inodeBlockData.putInt(dataBlockIndexInInode * PTRLEN, dataBlock.getAddress());
             inodeBlock.write(inodeBlockData.array());
             dataBlock.write(dataBlockData);
 
             size += dataBlockIndex - currentDataBlockSavedSize;
             currentDataBlockSavedSize = dataBlockIndex;
 
-            rootBlock.writeInt(4, size);
-            if (inodeBlock == rootBlock) {
-                inodeBlockData.putInt(4, size);
+            rootInodeBlock.writeInt(SIZE_IDX * PTRLEN, size);
+            if (inodeBlock == rootInodeBlock) {
+                inodeBlockData.putInt(SIZE_IDX * PTRLEN, size);
             }
+
+            log.debug("OS flush inode {}, size {}, last inode {} {}", rootInodeBlock.getAddress(), size, inodeBlock.getAddress(), Inode.this);
         }
 
         @Override
@@ -282,24 +329,34 @@ class Inode {
             } else {
                 flags.setNeedEmptyBlock(false);
             }
-            rootBlock.writeInt(0, flags.value());
+            rootInodeBlock.writeInt(FLAGS_IDX * PTRLEN, flags.value());
+
+            if (inodeBlock != rootInodeBlock) {
+                rootInodeBlock.writeInt(LAST_INODE_IDX * PTRLEN, inodeBlock.getAddress());
+            }
+
+            log.debug("OS closed inode {}, size {}, last inode {} {}", rootInodeBlock.getAddress(), size, inodeBlock.getAddress(), Inode.this);
 
             inodeBlock = null;
+            unlock();
         }
 
         private void createNextInodeIfNecessary() throws IOException {
-            if (dataBlockIndexInInode == nextInodeIndex) {
+            if (dataBlockIndexInInode == nextInodeBlockIndex) {
                 final DataBlocks.Block newInodeBlock = dataBlocks.allocateBlock();
                 newInodeBlock.clear();
 
-                inodeBlockData.putInt(nextInodeIndex * 4, newInodeBlock.getAddress());
+                inodeBlockData.putInt(nextInodeBlockIndex * PTRLEN, newInodeBlock.getAddress());
                 inodeBlock.write(inodeBlockData.array());
 
                 inodeBlock = newInodeBlock;
                 inodeBlockData = ByteBuffer.wrap(newInodeBlock.read());
 
-                dataBlockIndexInInode = 2;
+                log.debug("OS inode {} created new inode {}", rootInodeBlock.getAddress(), newInodeBlock.getAddress());
+
+                dataBlockIndexInInode = FIRST_DATA_BLOCK_IDX;
             }
         }
     }
+
 }

@@ -25,7 +25,7 @@ class DataBlocksTest {
     void setUp() throws IOException {
         tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
-        dataBlocks = new DataBlocks(tempFile, 64, 1);
+        dataBlocks = new DataBlocks(tempFile, 64, 1, "rw");
     }
 
     @Test
@@ -74,7 +74,7 @@ class DataBlocksTest {
         assertEquals(128, dataBlocks.debugGetTotalBlocks());
         assertEquals(26, dataBlocks.debugGetFreeBlocks());
 
-        final DataBlocks anotherBlocks = new DataBlocks(tempFile, 64, 1);
+        final DataBlocks anotherBlocks = new DataBlocks(tempFile, 64, 1, "rw");
 
         assertEquals(128, anotherBlocks.debugGetTotalBlocks());
         assertEquals(26, anotherBlocks.debugGetFreeBlocks());

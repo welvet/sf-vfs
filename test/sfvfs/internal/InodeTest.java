@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Reader;
@@ -12,6 +13,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * @author alexey.kutuzov
@@ -25,7 +27,7 @@ class InodeTest {
     void setUp() throws IOException {
         final File tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
-        dataBlocks = new DataBlocks(tempFile, 64, 2);
+        dataBlocks = new DataBlocks(tempFile, 64, 2, "rw");
         r = new Random(0);
     }
 
@@ -82,6 +84,8 @@ class InodeTest {
             assertEquals(generatedText.getBytes().length, inode.getSize());
             assertEquals(generatedText, read(inode));
         }
+
+        dataBlocks.debugPrintBlockUsage();
     }
 
     @Test
@@ -106,6 +110,8 @@ class InodeTest {
 
             inode.delete();
         }
+
+        dataBlocks.debugPrintBlockUsage();
     }
 
     @Test
@@ -153,6 +159,41 @@ class InodeTest {
     }
 
     @Test
+    void appendBinary() throws IOException {
+        final Inode inode = newInode();
+
+        int sum = 0;
+        try (OutputStream os = inode.appendStream()) {
+            for (int i = 0; i < 1_000; i++) {
+                r.setSeed(i);
+
+                final byte[] bytes = new byte[1024];
+                r.nextBytes(bytes);
+                for (final byte aByte : bytes) {
+                    sum += aByte;
+                }
+                os.write(bytes);
+            }
+        }
+
+        printInodes(inode);
+
+        int anotherSum = 0;
+        try (final InputStream inputStream = inode.readStream()) {
+            while (true) {
+                final int v = inputStream.read();
+                if (v == -1) {
+                    break;
+                }
+
+                anotherSum += (byte) v;
+            }
+        }
+
+        assertEquals(anotherSum, sum);
+    }
+
+    @Test
     void multipleFlush() throws IOException {
         final Inode inode = newInode();
 
@@ -174,6 +215,21 @@ class InodeTest {
 
         assertEquals(completeText.toString().getBytes().length, inode.getSize());
         assertEquals(completeText.toString(), read(inode));
+    }
+
+    @Test
+    void creatingMultipleStreamsWithoutClosingFails() throws IOException {
+        final Inode inode = newInode();
+        final OutputStream outputStream = inode.appendStream();
+        try {
+            inode.readStream();
+            fail("illegal state expected");
+        } catch (final IllegalStateException ignored) {
+
+        }
+
+        outputStream.close();
+        inode.readStream();
     }
 
     private void append(final Inode inode, final String text) throws IOException {
@@ -227,7 +283,7 @@ class InodeTest {
         while (true) {
             System.out.println(in.toString());
 
-            final int nextInodeAddress = in.debugGetNextInode();
+            final int nextInodeAddress = in.debugGetNextInodeAddress();
             if (nextInodeAddress != 0) {
                 in = new Inode(dataBlocks, nextInodeAddress);
             } else {

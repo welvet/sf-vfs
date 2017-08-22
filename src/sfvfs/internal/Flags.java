@@ -35,6 +35,7 @@ class Flags {
     static class InodeFlags {
 
         private static final int NEED_EMPTY_BLOCK = 0x1;
+        private static final int LOCKED = 0x2;
 
         private int flags;
 
@@ -51,6 +52,18 @@ class Flags {
                 flags |= NEED_EMPTY_BLOCK;
             } else {
                 flags &= ~NEED_EMPTY_BLOCK;
+            }
+        }
+
+        boolean isLocked() {
+            return (flags & LOCKED) == LOCKED;
+        }
+
+        void setLocked(final boolean locked) {
+            if (locked) {
+                flags |= LOCKED;
+            } else {
+                flags &= ~LOCKED;
             }
         }
 

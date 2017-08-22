@@ -1,5 +1,8 @@
 package sfvfs.internal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -11,10 +14,9 @@ import static sfvfs.utils.Preconditions.*;
 /**
  * @author alexey.kutuzov
  */
-class DataBlocks {
+class DataBlocks implements AutoCloseable {
 
-    private static final int DEFAULT_BLOCK_SIZE = 4 * 1024;
-    private static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 100;
+    private static final Logger log = LoggerFactory.getLogger(DataBlocks.class);
 
     private final int blockSize;
     private final int groupSize;
@@ -25,22 +27,20 @@ class DataBlocks {
     private final Map<Integer, BlockGroup> blockGroupsWithFreeBlocks = new HashMap<>();
     private int allocatedGroups;
 
-    public DataBlocks(final File file) throws IOException {
-        this(file, DEFAULT_BLOCK_SIZE, BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE);
-    }
-
-    DataBlocks(final File file, final int blockSize, final int blockGroupsWithFreeBlocksCacheSize) throws IOException {
+    DataBlocks(final File file, final int blockSize, final int blockGroupsWithFreeBlocksCacheSize, final String mode) throws IOException {
         checkArgument(blockSize > 0, "block size must be more than zero");
         checkArgument(((blockSize & -blockSize) == blockSize), "block size must be power of 2");
         checkNotNull(file, "file");
 
-        this.dataFile = new RandomAccessFile(file, "rw");
+        this.dataFile = new RandomAccessFile(file, mode);
 
         this.blockSize = blockSize;
         this.groupSize = blockSize * blockSize;
         this.blocksInGroup = blockSize;
         this.allocatedGroups = (int) (this.dataFile.length() / groupSize);
         this.blockGroupsWithFreeBlocksCacheSize = blockGroupsWithFreeBlocksCacheSize;
+
+        log.info("Blocks created on {} blocks size {} mode {}", file.getAbsoluteFile(), blockSize, mode);
     }
 
     Block allocateBlock() throws IOException {
@@ -59,6 +59,7 @@ class DataBlocks {
             while (blockGroupsWithFreeBlocks.size() < blockGroupsWithFreeBlocksCacheSize) {
                 final BlockGroup newGroup = new BlockGroup(allocatedGroups++);
                 blockGroupsWithFreeBlocks.put(newGroup.id, newGroup);
+                log.debug("group allocated {} {} - {}", newGroup.id, newGroup.id * groupSize, (newGroup.id + 1) * groupSize);
             }
         }
 
@@ -67,6 +68,7 @@ class DataBlocks {
             return blockGroup.allocateBlock();
         } finally {
             if (!blockGroup.hasFreeBlocks()) {
+                log.debug("group {} full, removing from pool", blockGroup.id);
                 blockGroupsWithFreeBlocks.remove(blockGroup.id);
             }
         }
@@ -80,6 +82,7 @@ class DataBlocks {
         if (blockGroupsWithFreeBlocks.size() < blockGroupsWithFreeBlocksCacheSize) {
             if (!blockGroupsWithFreeBlocks.containsKey(blockGroup.id)) {
                 blockGroupsWithFreeBlocks.put(blockGroup.id, blockGroup);
+                log.debug("group {} has {} empty slots, adding to pool", blockGroup.id, blockGroup.getFreeBlocks());
             }
         }
     }
@@ -101,6 +104,17 @@ class DataBlocks {
         }
 
         return result;
+    }
+
+    void debugPrintBlockUsage() throws IOException {
+        for (int i = 0; i < allocatedGroups; i++) {
+            log.info("group {} free {}", i, getBlockGroup(i).getFreeBlocks());
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        dataFile.close();
     }
 
     private BlockGroup getBlockGroup(final int id) throws IOException {
@@ -152,7 +166,7 @@ class DataBlocks {
 
         Block allocateBlock() throws IOException {
             initFreeBlocksCounter();
-            checkState(freeBlocks > 0, "no free blocks for " + id);
+            checkState(freeBlocks > 0, "no free blocks for %s", id);
 
             for (int i = 1; i < blocksInGroup; i++) {
                 final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[i]);
@@ -162,6 +176,8 @@ class DataBlocks {
 
                     freeBlocks--;
                     updateBlockData(i, currentBlockFlags);
+
+                    log.debug("<- block {} group {}", i, id);
 
                     return new Block(id * blocksInGroup + i);
                 }
@@ -179,6 +195,8 @@ class DataBlocks {
             currentBlockFlags.setTaken(false);
             freeBlocks++;
             updateBlockData(blockId, currentBlockFlags);
+
+            log.debug("-> block {} group {}", blockId, id);
         }
 
         private void updateBlockData(final int blockId, final Flags.BlockGroupFlags currentBlockFlags) throws IOException {
@@ -224,21 +242,21 @@ class DataBlocks {
         }
 
         int readInt(final int position) throws IOException {
-            checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
+            checkArgument(position >= 0 && position < blockSize, "unexpected position %s", position);
 
             dataFile.seek(address * blockSize + position);
             return dataFile.readInt();
         }
 
         void write(final byte[] bytes) throws IOException {
-            checkArgument(bytes.length <= blockSize, "unexpected block size " + bytes.length);
+            checkArgument(bytes.length <= blockSize, "unexpected block size %s", bytes.length);
 
             dataFile.seek(address * blockSize);
             dataFile.write(bytes);
         }
 
         void writeInt(final int position, final int value) throws IOException {
-            checkArgument(position >= 0 && position < blockSize, "unexpected position " + position);
+            checkArgument(position >= 0 && position < blockSize, "unexpected position %s", position);
 
             dataFile.seek(address * blockSize + position);
             dataFile.writeInt(value);
