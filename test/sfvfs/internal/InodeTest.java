@@ -11,9 +11,8 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
+import static sfvfs.utils.StringUtils.generateText;
 
 /**
  * @author alexey.kutuzov
@@ -49,7 +48,7 @@ class InodeTest {
 
             System.out.println("Checking " + i);
 
-            final String generatedText = generateText(i);
+            final String generatedText = generateText(r, i);
 
             final Inode inode = newInode();
             assertEquals(0, inode.getSize());
@@ -74,7 +73,7 @@ class InodeTest {
             final int takenBlocks = dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks();
             assertTrue(6 >= takenBlocks, takenBlocks + "");
 
-            final String generatedText = generateText(i);
+            final String generatedText = generateText(r, i);
 
             assertEquals(0, inode.getSize());
 
@@ -98,7 +97,7 @@ class InodeTest {
             final int takenBlocks = dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks();
             assertTrue(6 >= takenBlocks, takenBlocks + "");
 
-            final String generatedText = generateText(i);
+            final String generatedText = generateText(r, i);
 
             assertEquals(0, inode.getSize());
 
@@ -145,7 +144,7 @@ class InodeTest {
         for (int i = 0; i < 100; i ++) {
             r.setSeed(i);
 
-            final String generatedText = generateText(i);
+            final String generatedText = generateText(r, i);
             completeText.append(generatedText);
 
             System.out.println("Checking " + i + " size: " + completeText.toString().getBytes().length);
@@ -203,7 +202,7 @@ class InodeTest {
             r.setSeed(i);
 
             try (OutputStream os = inode.appendStream()) {
-                final String generatedText = generateText(i);
+                final String generatedText = generateText(r, i);
                 completeText.append(generatedText);
 
                 os.write(generatedText.getBytes());
@@ -262,20 +261,6 @@ class InodeTest {
         return new Inode(dataBlocks, block.getAddress());
     }
 
-    private String generateText(final int len) {
-        final StringBuilder sb = new StringBuilder(len);
-
-        for (int i = 0; i < len; i++) {
-            char c = (char) r.nextInt();
-            while (!Character.isAlphabetic(c)) {
-                c = (char) r.nextInt();
-            }
-
-            sb.append(c);
-        }
-
-        return sb.toString();
-    }
 
     private void printInodes(final Inode inode) throws IOException {
         Inode in = inode;

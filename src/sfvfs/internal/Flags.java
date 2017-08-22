@@ -77,4 +77,31 @@ class Flags {
         }
     }
 
+    static class DirectoryFlags {
+
+        private static final int INDEXED = 0x1;
+
+        private int flags;
+
+        DirectoryFlags(final int flags) {
+            this.flags = flags;
+        }
+
+        boolean isIndexed() {
+            return (flags & INDEXED) == INDEXED;
+        }
+
+        void setIndexed(final boolean indexed) {
+            if (indexed) {
+                flags |= INDEXED;
+            } else {
+                flags &= ~INDEXED;
+            }
+        }
+
+        int value() {
+            return flags;
+        }
+    }
+
 }
