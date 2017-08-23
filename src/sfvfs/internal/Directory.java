@@ -18,6 +18,9 @@ import static sfvfs.utils.Streams.iteratorToStream;
  */
 public class Directory {
 
+    public static final String NAME_REGEXP = "[A-Za-z0-9\\-_.]+";
+    public static final String NAME_REGEXP_AND_SLASH = "[A-Za-z0-9\\-_./]+";
+
     private final static int NULL_POINTER = 0;
     private final static int PTRLEN = 4;
 
@@ -31,7 +34,7 @@ public class Directory {
     private final int lastEntityListInRootBlock;
     private final int maxNameLen;
 
-    Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen) {
+    public Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen) {
         checkNotNull(dataBlocks, "dataBlocks");
         checkArgument(address > 0, "address must be more than 0: %s", address);
         checkArgument(maxNameLen > 0, "max len must be more than 0 %s", maxNameLen);
@@ -44,7 +47,11 @@ public class Directory {
         checkArgument(rootBlock.size() > 2 * maxNameLen, "block size must be at least 2 times bigger than max len");
     }
 
-    void create() throws IOException {
+    public int getRootBlockAddress() {
+        return rootBlock.getAddress();
+    }
+
+    public void create() throws IOException {
         rootBlock.clear();
 
         rootBlock.writeInt(FLAGS_IDX * PTRLEN, 0);
@@ -56,7 +63,7 @@ public class Directory {
         log.debug("dir {} created", rootBlock.getAddress(), firstPlainDirBlock.getAddress());
     }
 
-    Iterator<Entity> listEntities() throws IOException {
+    public Iterator<DirectoryEntity> listEntities() throws IOException {
         return getAllEntityLists()
                 .stream()
                 .flatMap(entityList -> {
@@ -69,7 +76,7 @@ public class Directory {
                 .iterator();
     }
 
-    int size() throws IOException {
+    public int size() throws IOException {
         return getAllEntityLists()
                 .stream()
                 .mapToInt(entityList -> {
@@ -82,38 +89,42 @@ public class Directory {
                 .sum();
     }
 
-    void addEntity(final String name, final int address) throws IOException {
+    public void addEntity(final String name, final int address, final Flags.DirectoryListEntityFlags flags) throws IOException {
         checkNotNull(name, "name");
+        checkNotNull(flags, "flags");
         checkArgument(address > 0, "address must be more than 0: %s", address);
         checkArgument(name.length() <= maxNameLen, "name len must be les than %s: %s", maxNameLen, name);
-        checkArgument(name.matches("[A-Za-z0-9]+"), "name doesn't match [A-Za-z0-9]+ %s", name);
+        checkArgument(name.matches(NAME_REGEXP), "name doesn't match %s %s", NAME_REGEXP, name);
 
-        checkState(!exists(name), "element %s already exists", name);
+        checkState(find(name) == null, "element %s already exists", name);
 
-        getEntityList(name).addEntity(name, address);
+        getEntityList(name).addEntity(name, address, flags);
     }
 
-    boolean exists(final String name) throws IOException {
+    public DirectoryEntity find(final String name) throws IOException {
         checkNotNull(name, "name");
 
-        final Iterator<Entity> entityIterator = getEntityList(name).listEntities();
+        final Iterator<DirectoryEntity> entityIterator = getEntityList(name).listEntities();
         while (entityIterator.hasNext()) {
-            if (entityIterator.next().getName().equals(name)) {
-                return true;
+            final DirectoryEntity entity = entityIterator.next();
+            if (entity.getName().equals(name)) {
+                return entity;
             }
         }
 
-        return false;
+        return null;
     }
 
-    void removeEntity(final String name) throws IOException {
+    public void removeEntity(final String name) throws IOException {
         checkNotNull(name, "name");
 
         getEntityList(name).remove(name);
     }
 
-    void delete() throws IOException {
-        checkState(size() == 0, "directory is not empty %s", rootBlock.getAddress());
+    public void delete() throws IOException {
+        if (size() != 0) {
+            throw new IOException("directory is not empty size=" + size());
+        }
 
         for (final EntityList entityList : getAllEntityLists()) {
             entityList.delete();
@@ -186,9 +197,9 @@ public class Directory {
             this.entityListRootBlock = dataBlocks.getBlock(entityListBlockAddress);
         }
 
-        Iterator<Entity> listEntities() throws IOException {
+        Iterator<DirectoryEntity> listEntities() throws IOException {
 
-            return new Iterator<Entity>() {
+            return new Iterator<DirectoryEntity>() {
                 private Node next;
 
                 private DataBlocks.Block currentListBlock = entityListRootBlock;
@@ -230,7 +241,7 @@ public class Directory {
                 }
 
                 @Override
-                public Entity next() {
+                public DirectoryEntity next() {
                     if (!hasNext()) {
                         throw new NoSuchElementException();
                     }
@@ -248,8 +259,8 @@ public class Directory {
             return entityListRootBlock.readInt(SIZE_IDX * PTRLEN);
         }
 
-        void addEntity(final String name, final int address) throws IOException {
-            final Node newNode = new Node(address, name, -1, -1);
+        void addEntity(final String name, final int address, final Flags.DirectoryListEntityFlags flags) throws IOException {
+            final Node newNode = new Node(address, name, flags, -1, -1);
             final int newNodeLen = newNode.length();
 
             DataBlocks.Block currentListBlock = entityListRootBlock;
@@ -293,11 +304,11 @@ public class Directory {
         }
 
         void remove(final String name) throws IOException {
-            final Iterator<Entity> entityIterator = listEntities();
+            final Iterator<DirectoryEntity> entityIterator = listEntities();
             Node node = null;
 
             while (entityIterator.hasNext()) {
-                final Entity entity = entityIterator.next();
+                final DirectoryEntity entity = entityIterator.next();
                 if (entity.getName().equals(name)) {
                     node = (Node) entity;
                     break;
@@ -386,11 +397,13 @@ public class Directory {
                 return null;
             }
 
+            final Flags.DirectoryListEntityFlags flags = new Flags.DirectoryListEntityFlags(byteBuffer.get());
+
             final int nameLength = byteBuffer.get();
             final byte[] nameBytes = new byte[nameLength];
             byteBuffer.get(nameBytes);
 
-            return new Node(firstInodeBlockAddress, new String(nameBytes), entityNodeListAddress, offset);
+            return new Node(firstInodeBlockAddress, new String(nameBytes), flags, entityNodeListAddress, offset);
         }
 
         @Override
@@ -399,7 +412,7 @@ public class Directory {
 
             sb.append("Entities [address=").append(entityListRootBlock.getAddress()).append("] \n");
             try {
-                final Iterator<Entity> entityIterator = listEntities();
+                final Iterator<DirectoryEntity> entityIterator = listEntities();
                 while (entityIterator.hasNext()) {
                     sb.append("  ").append(entityIterator.next()).append("\n");
                 }
@@ -410,18 +423,48 @@ public class Directory {
             return sb.toString();
         }
 
-        private class Node extends Entity {
+        private class Node implements DirectoryEntity {
+            private final String name;
+            private final int address;
+            private final Flags.DirectoryListEntityFlags flags;
             private final int entityNodeListAddress;
             private final int offset;
 
-            Node(final int inodeBlockAddress, final String name, final int entityNodeListAddress, final int offset) {
-                super(name, inodeBlockAddress);
+            Node(final int inodeBlockAddress, final String name, final Flags.DirectoryListEntityFlags flags, final int entityNodeListAddress, final int offset) {
+                this.name = name;
+                this.address = inodeBlockAddress;
+                this.flags = flags;
                 this.entityNodeListAddress = entityNodeListAddress;
                 this.offset = offset;
             }
 
+            @Override
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public int getAddress() {
+                return address;
+            }
+
+            @Override
+            public boolean isDirectory() {
+                return flags.isDirectory();
+            }
+
+            @Override
+            public int getParentDirectoryAddress() {
+                return rootBlock.getAddress();
+            }
+
+            @Override
+            public Flags.DirectoryListEntityFlags getFlags() {
+                return new Flags.DirectoryListEntityFlags(flags.value());
+            }
+
             int length() {
-                return PTRLEN + name.getBytes().length;
+                return Flags.DirectoryListEntityFlags.LENGTH + PTRLEN + name.getBytes().length;
             }
 
             void write(final ByteBuffer byteBuffer, final int offset) {
@@ -431,6 +474,7 @@ public class Directory {
 
                 byteBuffer.position(offset);
                 byteBuffer.putInt(address);
+                byteBuffer.put(flags.value());
 
                 final byte[] nameBytes = name.getBytes();
                 byteBuffer.put((byte) nameBytes.length);
@@ -442,52 +486,6 @@ public class Directory {
                 return String.format("Entity [address=%d] root=%d list=%s offset=%s len=%s name=%s",
                         address, rootBlock.getAddress(), entityNodeListAddress, offset, length(), name);
             }
-        }
-    }
-
-    public class Entity implements Comparable<Entity> {
-        final String name;
-        final int address;
-
-        private Entity(final String name, final int address) {
-            this.name = name;
-            this.address = address;
-        }
-
-        String getName() {
-            return name;
-        }
-
-        int getAddress() {
-            return address;
-        }
-
-        @Override
-        public int compareTo(final Entity o) {
-            return name.compareTo(o.name);
-        }
-
-        @Override
-        public boolean equals(final Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            final Entity entity = (Entity) o;
-
-            return address == entity.address
-                    && (name != null ? name.equals(entity.name)
-                    : entity.name == null);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = name != null ? name.hashCode() : 0;
-            result = 31 * result + address;
-            return result;
         }
     }
 

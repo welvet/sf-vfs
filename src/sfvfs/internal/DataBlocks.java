@@ -14,7 +14,10 @@ import static sfvfs.utils.Preconditions.*;
 /**
  * @author alexey.kutuzov
  */
-class DataBlocks implements AutoCloseable {
+public class DataBlocks implements AutoCloseable {
+
+    private static final int FREE_BLOCKS_NOT_INITIALIZED = -1;
+    private static final int FIRST_AVAILABLE_BLOCK = 1;
 
     private static final Logger log = LoggerFactory.getLogger(DataBlocks.class);
 
@@ -27,7 +30,7 @@ class DataBlocks implements AutoCloseable {
     private final Map<Integer, BlockGroup> blockGroupsWithFreeBlocks = new HashMap<>();
     private int allocatedGroups;
 
-    DataBlocks(final File file, final int blockSize, final int blockGroupsWithFreeBlocksCacheSize, final String mode) throws IOException {
+    public DataBlocks(final File file, final int blockSize, final int blockGroupsWithFreeBlocksCacheSize, final String mode) throws IOException {
         checkArgument(blockSize > 0, "block size must be more than zero");
         checkArgument(((blockSize & -blockSize) == blockSize), "block size must be power of 2");
         checkNotNull(file, "file");
@@ -40,10 +43,10 @@ class DataBlocks implements AutoCloseable {
         this.allocatedGroups = (int) (this.dataFile.length() / groupSize);
         this.blockGroupsWithFreeBlocksCacheSize = blockGroupsWithFreeBlocksCacheSize;
 
-        log.info("Blocks created on {} blocks size {} mode {}", file.getAbsoluteFile(), blockSize, mode);
+        log.info("blocks created on {} blocks size {} mode {}", file.getAbsoluteFile(), blockSize, mode);
     }
 
-    Block allocateBlock() throws IOException {
+    public Block allocateBlock() throws IOException {
         if (blockGroupsWithFreeBlocks.isEmpty()) {
             for (int i = 0; i < allocatedGroups; i++) {
                 final BlockGroup blockGroup = getBlockGroup(i);
@@ -87,23 +90,27 @@ class DataBlocks implements AutoCloseable {
         }
     }
 
-    Block getBlock(final int blockAddress) {
+    public Block getBlock(final int blockAddress) {
         checkArgument(blockAddress > 0, "block address must be more than 0");
         //no allocation check
         return new Block(blockAddress);
     }
 
-    int debugGetTotalBlocks() throws IOException {
+    public int getTotalBlocks() throws IOException {
         return allocatedGroups * blocksInGroup;
     }
 
-    int debugGetFreeBlocks() throws IOException {
+    public int getFreeBlocks() throws IOException {
         int result = 0;
         for (int i = 0; i < allocatedGroups; i++) {
             result += getBlockGroup(i).getFreeBlocks();
         }
 
         return result;
+    }
+
+    public int getBlockSize() {
+        return blockSize;
     }
 
     void debugPrintBlockUsage() throws IOException {
@@ -128,7 +135,7 @@ class DataBlocks implements AutoCloseable {
 
     private class BlockGroup {
         private final int id;
-        private int freeBlocks = -1;
+        private int freeBlocks = FREE_BLOCKS_NOT_INITIALIZED;
         private final byte[] cachedMetaBlockData;
 
         BlockGroup(final int id) throws IOException {
@@ -168,7 +175,7 @@ class DataBlocks implements AutoCloseable {
             initFreeBlocksCounter();
             checkState(freeBlocks > 0, "no free blocks for %s", id);
 
-            for (int i = 1; i < blocksInGroup; i++) {
+            for (int i = FIRST_AVAILABLE_BLOCK; i < blocksInGroup; i++) {
                 final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[i]);
 
                 if (!currentBlockFlags.isTaken()) {
@@ -207,10 +214,10 @@ class DataBlocks implements AutoCloseable {
         }
 
         private void initFreeBlocksCounter() throws IOException {
-            if (freeBlocks == -1) {
+            if (freeBlocks == FREE_BLOCKS_NOT_INITIALIZED) {
                 int free = 0;
 
-                for (int i = 1; i < blockSize; i++) {
+                for (int i = FIRST_AVAILABLE_BLOCK; i < blocksInGroup; i++) {
                     final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[i]);
                     if (!currentBlockFlags.isTaken()) {
                         free++;
@@ -227,7 +234,7 @@ class DataBlocks implements AutoCloseable {
         }
     }
 
-    class Block {
+    public class Block {
         private final int address;
 
         private Block(final int address) {
@@ -266,7 +273,7 @@ class DataBlocks implements AutoCloseable {
             write(new byte[blockSize]);
         }
 
-        int getAddress() {
+        public int getAddress() {
             return address;
         }
 

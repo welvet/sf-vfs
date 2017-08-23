@@ -33,11 +33,11 @@ class DataBlocksTest {
         final DataBlocks.Block block = dataBlocks.allocateBlock();
         assertNotNull(block);
 
-        assertEquals(64, dataBlocks.debugGetTotalBlocks());
-        assertEquals(62, dataBlocks.debugGetFreeBlocks());
+        assertEquals(64, dataBlocks.getTotalBlocks());
+        assertEquals(62, dataBlocks.getFreeBlocks());
 
         dataBlocks.deallocateBlock(block.getAddress());
-        assertEquals(63, dataBlocks.debugGetFreeBlocks());
+        assertEquals(63, dataBlocks.getFreeBlocks());
     }
 
     @Test
@@ -47,22 +47,22 @@ class DataBlocksTest {
             blocks.add(dataBlocks.allocateBlock());
         }
 
-        assertEquals(128, dataBlocks.debugGetTotalBlocks());
-        assertEquals(26, dataBlocks.debugGetFreeBlocks());
+        assertEquals(128, dataBlocks.getTotalBlocks());
+        assertEquals(26, dataBlocks.getFreeBlocks());
 
         for (final DataBlocks.Block block : blocks) {
             dataBlocks.deallocateBlock(block.getAddress());
         }
 
-        assertEquals(128, dataBlocks.debugGetTotalBlocks());
-        assertEquals(126, dataBlocks.debugGetFreeBlocks());
+        assertEquals(128, dataBlocks.getTotalBlocks());
+        assertEquals(126, dataBlocks.getFreeBlocks());
 
         for (int i = 0; i < 128; i++) {
             blocks.add(dataBlocks.allocateBlock());
         }
 
-        assertEquals(192, dataBlocks.debugGetTotalBlocks());
-        assertEquals(61, dataBlocks.debugGetFreeBlocks());
+        assertEquals(192, dataBlocks.getTotalBlocks());
+        assertEquals(61, dataBlocks.getFreeBlocks());
     }
 
     @Test
@@ -71,13 +71,13 @@ class DataBlocksTest {
             dataBlocks.allocateBlock();
         }
 
-        assertEquals(128, dataBlocks.debugGetTotalBlocks());
-        assertEquals(26, dataBlocks.debugGetFreeBlocks());
+        assertEquals(128, dataBlocks.getTotalBlocks());
+        assertEquals(26, dataBlocks.getFreeBlocks());
 
         final DataBlocks anotherBlocks = new DataBlocks(tempFile, 64, 1, "rw");
 
-        assertEquals(128, anotherBlocks.debugGetTotalBlocks());
-        assertEquals(26, anotherBlocks.debugGetFreeBlocks());
+        assertEquals(128, anotherBlocks.getTotalBlocks());
+        assertEquals(26, anotherBlocks.getFreeBlocks());
     }
 
     @Test

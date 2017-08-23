@@ -13,9 +13,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
 import static sfvfs.utils.Streams.iteratorToStream;
 import static sfvfs.utils.StringUtils.generateEnLetters;
 
@@ -38,14 +36,14 @@ class DirectoryTest {
     @Test
     void createSimpleDirectoryAddAndListEntity() throws IOException {
         final Directory directory = createDirectory();
-        directory.addEntity("test", 1234);
+        directory.addEntity("test", 1234, new Flags.DirectoryListEntityFlags());
 
         System.out.println(directory);
 
-        final List<Directory.Entity> entities = iterToList(directory.listEntities());
+        final List<DirectoryEntity> entities = iterToList(directory.listEntities());
         assertEquals(1, directory.size());
         assertEquals(1, entities.size());
-        assertTrue(directory.exists("test"));
+        assertNotNull(directory.find("test"));
 
         assertEquals("test", entities.get(0).getName());
     }
@@ -53,7 +51,7 @@ class DirectoryTest {
     @Test
     void simpleDelete() throws IOException {
         final Directory directory = createDirectory();
-        directory.addEntity("test", 1234);
+        directory.addEntity("test", 1234, new Flags.DirectoryListEntityFlags());
 
         directory.removeEntity("test1");
         assertEquals(1, directory.size());
@@ -63,6 +61,15 @@ class DirectoryTest {
 
         assertEquals(0, directory.size());
         assertEquals(0, iterToList(directory.listEntities()).size());
+    }
+
+    @Test
+    void flags() throws IOException {
+        final Directory directory = createDirectory();
+        final Flags.DirectoryListEntityFlags flags = new Flags.DirectoryListEntityFlags();
+        flags.setDirectory(true);
+        directory.addEntity("test", 1234, flags);
+        assertTrue(directory.find("test").isDirectory());
     }
 
     @Test
@@ -80,7 +87,7 @@ class DirectoryTest {
                     continue;
                 }
                 existing.put(name, i * j + 1);
-                directory.addEntity(name, i * j + 1);
+                directory.addEntity(name, i * j + 1, new Flags.DirectoryListEntityFlags());
 
                 validateDirectoryListing(directory, existing);
             }
@@ -102,7 +109,7 @@ class DirectoryTest {
                 continue;
             }
             existing.put(name, j);
-            directory.addEntity(name, j);
+            directory.addEntity(name, j, new Flags.DirectoryListEntityFlags());
 
             validateDirectoryListing(directory, existing);
         }
@@ -131,7 +138,7 @@ class DirectoryTest {
 
                         existing.put(name, address);
                         names.add(name);
-                        directory.addEntity(name, address);
+                        directory.addEntity(name, address, new Flags.DirectoryListEntityFlags());
                     } else {
                         if (names.size() > 0) {
                             final String toRemove = names.remove(r.nextInt(names.size()));
@@ -153,10 +160,10 @@ class DirectoryTest {
         final Directory directory = createDirectory();
 
         for (int j = 1; j < 1000; j++) {
-            directory.addEntity("i" + j, j);
+            directory.addEntity("i" + j, j, new Flags.DirectoryListEntityFlags());
         }
 
-        assertEquals(169, dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks());
+        assertEquals(202, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
 
         for (int j = 1; j < 1000; j++) {
             directory.removeEntity("i" + j);
@@ -164,17 +171,17 @@ class DirectoryTest {
 
         directory.delete();
 
-        assertEquals(4, dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks());
+        assertEquals(4, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
     }
 
     private void validateDirectoryListing(final Directory directory, final Map<String, Integer> existing) throws IOException {
         assertEquals(existing.size(), directory.size());
 
         final HashMap<String, Integer> validating = new HashMap<>(existing);
-        final Iterator<Directory.Entity> entityIterator = directory.listEntities();
+        final Iterator<DirectoryEntity> entityIterator = directory.listEntities();
 
         while (entityIterator.hasNext()) {
-            final Directory.Entity entity = entityIterator.next();
+            final DirectoryEntity entity = entityIterator.next();
             final Integer existingAddress = validating.remove(entity.getName());
             if (existingAddress != entity.getAddress()) {
                 System.out.println(directory);

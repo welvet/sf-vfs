@@ -70,7 +70,7 @@ class InodeTest {
 
             inode.clear();
             printInodes(inode);
-            final int takenBlocks = dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks();
+            final int takenBlocks = dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks();
             assertTrue(6 >= takenBlocks, takenBlocks + "");
 
             final String generatedText = generateText(r, i);
@@ -94,7 +94,7 @@ class InodeTest {
             System.out.println("Checking " + i);
 
             final Inode inode = newInode();
-            final int takenBlocks = dataBlocks.debugGetTotalBlocks() - dataBlocks.debugGetFreeBlocks();
+            final int takenBlocks = dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks();
             assertTrue(6 >= takenBlocks, takenBlocks + "");
 
             final String generatedText = generateText(r, i);

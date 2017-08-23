@@ -13,7 +13,7 @@ import static sfvfs.utils.Preconditions.*;
 /**
  * @author alexey.kutuzov
  */
-class Inode {
+public class Inode {
 
     private final static int NULL_POINTER = 0;
     private final static int PTRLEN = 4;
@@ -30,7 +30,7 @@ class Inode {
 
     private final DataBlocks.Block rootInodeBlock;
 
-    Inode(final DataBlocks dataBlocks, final int address) throws IOException {
+    public Inode(final DataBlocks dataBlocks, final int address) throws IOException {
         checkNotNull(dataBlocks, "dataBlocks");
         checkArgument(address > 0, "address must be more than 0: %s", address);
 
@@ -40,18 +40,18 @@ class Inode {
         this.nextInodeBlockIndex = (rootInodeBlock.size() / PTRLEN) - 1;
     }
 
-    int getSize() throws IOException {
+    public int getSize() throws IOException {
         return this.rootInodeBlock.readInt(SIZE_IDX * PTRLEN);
     }
 
-    InputStream readStream() throws IOException {
+    public InputStream readStream() throws IOException {
         checkLockedAndLock();
 
         log.debug("IS open inode {}", Inode.this);
         return new InodeInputStream();
     }
 
-    OutputStream appendStream() throws IOException {
+    public OutputStream appendStream() throws IOException {
         checkLockedAndLock();
 
         DataBlocks.Block lastInodeBlock = rootInodeBlock;
@@ -98,11 +98,11 @@ class Inode {
         );
     }
 
-    void clear() throws IOException {
+    public void clear() throws IOException {
         clear(false);
     }
 
-    void delete() throws IOException {
+    public void delete() throws IOException {
         clear(true);
     }
 
@@ -191,6 +191,10 @@ class Inode {
         }
 
         return result.toString();
+    }
+
+    public int getAddress() {
+        return rootInodeBlock.getAddress();
     }
 
     private class InodeInputStream extends InputStream {

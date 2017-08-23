@@ -3,7 +3,7 @@ package sfvfs.internal;
 /**
  * @author alexey.kutuzov
  */
-class Flags {
+public class Flags {
 
     static class BlockGroupFlags {
 
@@ -100,6 +100,39 @@ class Flags {
         }
 
         int value() {
+            return flags;
+        }
+    }
+
+    public static class DirectoryListEntityFlags {
+
+        public static final int LENGTH = 1;
+
+        private static final int IS_DIRECTORY = 0x1;
+
+        private byte flags;
+
+        public DirectoryListEntityFlags() {
+            this.flags = 0;
+        }
+
+        public DirectoryListEntityFlags(final byte flags) {
+            this.flags = flags;
+        }
+
+        boolean isDirectory() {
+            return (flags & IS_DIRECTORY) == IS_DIRECTORY;
+        }
+
+        public void setDirectory(final boolean directory) {
+            if (directory) {
+                flags |= IS_DIRECTORY;
+            } else {
+                flags &= ~IS_DIRECTORY;
+            }
+        }
+
+        byte value() {
             return flags;
         }
     }
