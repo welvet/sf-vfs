@@ -24,10 +24,11 @@ class DirectoryTest {
 
     private Random r;
     private DataBlocks dataBlocks;
+    private File tempFile;
 
     @BeforeEach
     void setUp() throws IOException {
-        final File tempFile = File.createTempFile("sfvsf", ".dat");
+        tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
         dataBlocks = new DataBlocks(tempFile, 64, 2, "rw");
         r = new Random(0);
@@ -118,8 +119,66 @@ class DirectoryTest {
     }
 
     @Test
-    void addAndDeleteMultipleEntities() throws IOException {
+    void addAndDeleteMultipleEntitiesNoIndex() throws IOException {
+        checkAddDeleteMultipleEntities(createDirectory());
+    }
+
+    @Test
+    void addAndDeleteMultipleEntitiesIndexed() throws IOException {
+        checkAddDeleteMultipleEntities(createDirectory(10));
+    }
+
+    @Test
+    void addALotEntitiesToIndexedDir() throws IOException {
+        final DataBlocks dataBlocks = new DataBlocks(tempFile, 1024, 2, "rw");
+
+        final DataBlocks.Block block = dataBlocks.allocateBlock();
+        final Directory directory = new Directory(dataBlocks, block.getAddress(), 30, 10);
+        directory.create();
+
+        final int iters = 10_000;
+
+        for (int j = 1; j < iters; j++) {
+            directory.addEntity("" + j, j, new Flags.DirectoryListEntityFlags());
+        }
+
+        System.out.println(directory);
+
+        for (int j = 1; j < iters; j++) {
+            assertEquals(j, directory.find("" + j).getAddress());
+        }
+
+        for (int j = 1; j < iters; j++) {
+            directory.removeEntity("" + j);
+        }
+
+        assertEquals(0, directory.size());
+
+        for (int j = 1; j < iters; j++) {
+            assertNull(directory.find("" + j));
+        }
+    }
+
+    @Test
+    void deleteDirectory() throws IOException {
         final Directory directory = createDirectory();
+
+        for (int j = 1; j < 1000; j++) {
+            directory.addEntity("i" + j, j, new Flags.DirectoryListEntityFlags());
+        }
+
+        assertEquals(202, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
+
+        for (int j = 1; j < 1000; j++) {
+            directory.removeEntity("i" + j);
+        }
+
+        directory.delete();
+
+        assertEquals(4, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
+    }
+
+    private void checkAddDeleteMultipleEntities(final Directory directory) throws IOException {
         final Map<String, Integer> existing = new HashMap<>();
         final List<String> names = new ArrayList<>();
 
@@ -155,25 +214,6 @@ class DirectoryTest {
         }
     }
 
-    @Test
-    void deleteDirectory() throws IOException {
-        final Directory directory = createDirectory();
-
-        for (int j = 1; j < 1000; j++) {
-            directory.addEntity("i" + j, j, new Flags.DirectoryListEntityFlags());
-        }
-
-        assertEquals(202, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
-
-        for (int j = 1; j < 1000; j++) {
-            directory.removeEntity("i" + j);
-        }
-
-        directory.delete();
-
-        assertEquals(4, dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks());
-    }
-
     private void validateDirectoryListing(final Directory directory, final Map<String, Integer> existing) throws IOException {
         assertEquals(existing.size(), directory.size());
 
@@ -200,8 +240,12 @@ class DirectoryTest {
     }
 
     private Directory createDirectory() throws IOException {
+        return createDirectory(Integer.MAX_VALUE);
+    }
+
+    private Directory createDirectory(final int directoryMinSizeToBecomeIndexed) throws IOException {
         final DataBlocks.Block block = dataBlocks.allocateBlock();
-        final Directory directory = new Directory(dataBlocks, block.getAddress(), 30);
+        final Directory directory = new Directory(dataBlocks, block.getAddress(), 30, directoryMinSizeToBecomeIndexed);
         directory.create();
         return directory;
     }

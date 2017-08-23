@@ -18,9 +18,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 
-import static sfvfs.SFVFSFilesystemProvider.*;
-import static sfvfs.SFVFSFilesystemProvider.ROOT_DATA_BLOCK_ADDRESS;
+import static sfvfs.utils.Preconditions.checkArgument;
 import static sfvfs.utils.Preconditions.checkNotNull;
+import static sfvfs.utils.Preconditions.checkState;
 
 /**
  * @author alexey.kutuzov
@@ -31,15 +31,26 @@ public class SFVFSFileSystem extends FileSystem {
     private final DataBlocks dataBlocks;
     private final SFVFSFileStore fileStore;
 
+    private final int rootDirAddress;
+    private final int dirMaxNameLen;
+    private final int directoryMinSizeToBecomeIndexed;
+    private final long workingThreadId;
+
     private boolean open = true;
 
-    SFVFSFileSystem(final SFVFSFilesystemProvider provider, final DataBlocks dataBlocks) {
+    SFVFSFileSystem(final SFVFSFilesystemProvider provider, final DataBlocks dataBlocks, final int rootDirAddress, final int dirMaxNameLen, final int directoryMinSizeToBecomeIndexed) {
         checkNotNull(provider, "provider");
         checkNotNull(dataBlocks, "dataBlocks");
+        checkArgument(rootDirAddress > 0, "root address must be > 0 %s", rootDirAddress);
 
         this.provider = provider;
         this.dataBlocks = dataBlocks;
         this.fileStore = new SFVFSFileStore(dataBlocks);
+
+        this.rootDirAddress = rootDirAddress;
+        this.workingThreadId = Thread.currentThread().getId();
+        this.dirMaxNameLen = dirMaxNameLen;
+        this.directoryMinSizeToBecomeIndexed = directoryMinSizeToBecomeIndexed;
     }
 
     @Override
@@ -75,7 +86,7 @@ public class SFVFSFileSystem extends FileSystem {
     @Override
     public Iterable<Path> getRootDirectories() {
         final ArrayList<Path> result = new ArrayList<>();
-        result.add(new SFVFSPath(this, dataBlocks, "/"));
+        result.add(new SFVFSPath(this, "/"));
         return result;
     }
 
@@ -99,7 +110,7 @@ public class SFVFSFileSystem extends FileSystem {
             sb.append("/").append(aMore);
         }
 
-        return new SFVFSPath(this, dataBlocks, sb.toString());
+        return new SFVFSPath(this, sb.toString());
     }
 
     @Override
@@ -126,7 +137,7 @@ public class SFVFSFileSystem extends FileSystem {
 
             @Override
             public int getAddress() {
-                return ROOT_DATA_BLOCK_ADDRESS;
+                return rootDirAddress;
             }
 
             @Override
@@ -149,28 +160,43 @@ public class SFVFSFileSystem extends FileSystem {
     }
 
     Directory getRootDirectory() {
-        return getDirectory(ROOT_DATA_BLOCK_ADDRESS);
+        checkThread();
+
+        return getDirectory(rootDirAddress);
     }
 
     Directory getDirectory(final int address) {
-        return new Directory(dataBlocks, address, MAX_NAME_LEN);
+        checkThread();
+
+        return new Directory(dataBlocks, address, dirMaxNameLen, directoryMinSizeToBecomeIndexed);
     }
 
     Directory createDirectory() throws IOException {
+        checkThread();
+
         final DataBlocks.Block dirBlock = dataBlocks.allocateBlock();
-        final Directory newDir = new Directory(dataBlocks, dirBlock.getAddress(), MAX_NAME_LEN);
+        final Directory newDir = new Directory(dataBlocks, dirBlock.getAddress(), dirMaxNameLen, directoryMinSizeToBecomeIndexed);
         newDir.create();
         return newDir;
     }
 
     Inode getInode(final int address) throws IOException {
+        checkThread();
+
         return new Inode(dataBlocks, address);
     }
 
     Inode createInode() throws IOException {
+        checkThread();
+
         final DataBlocks.Block dirBlock = dataBlocks.allocateBlock();
         final Inode inode = new Inode(dataBlocks, dirBlock.getAddress());
         inode.clear();
         return inode;
     }
+
+    private void checkThread() {
+        checkState(Thread.currentThread().getId() == workingThreadId, "fs direct access by different than it's creator thread is prohibited, use thread with id %s", workingThreadId);
+    }
+
 }

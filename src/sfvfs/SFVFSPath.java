@@ -22,18 +22,15 @@ import static sfvfs.utils.Preconditions.checkNotNull;
  */
 public class SFVFSPath implements Path {
     private final SFVFSFileSystem sfvfsFileSystem;
-    private final DataBlocks dataBlocks;
     private final String path;
 
-    SFVFSPath(final SFVFSFileSystem sfvfsFileSystem, final DataBlocks dataBlocks, final String path) {
+    SFVFSPath(final SFVFSFileSystem sfvfsFileSystem, final String path) {
         checkNotNull(sfvfsFileSystem, "sfvfsFileSystem");
-        checkNotNull(dataBlocks, "dataBlocks");
         checkNotNull(path, "path");
         checkArgument(path.startsWith("/"), "path must start with / %s", path);
         checkArgument(path.matches(NAME_REGEXP_AND_SLASH), "path doesn't match %s %s", NAME_REGEXP_AND_SLASH, path);
 
         this.sfvfsFileSystem = sfvfsFileSystem;
-        this.dataBlocks = dataBlocks;
         try {
             this.path = new URI(path).normalize().getPath();
         } catch (final URISyntaxException e) {
@@ -55,7 +52,7 @@ public class SFVFSPath implements Path {
 
     @Override
     public SFVFSPath getRoot() {
-        return new SFVFSPath(sfvfsFileSystem, dataBlocks, "/");
+        return new SFVFSPath(sfvfsFileSystem, "/");
     }
 
     @Override
@@ -75,7 +72,7 @@ public class SFVFSPath implements Path {
         }
 
         final String substring = path.substring(0, lastDelimIndex);
-        return new SFVFSPath(sfvfsFileSystem, dataBlocks, substring);
+        return new SFVFSPath(sfvfsFileSystem, substring);
     }
 
     @Override
@@ -132,7 +129,7 @@ public class SFVFSPath implements Path {
             newPath = path + "/" + other;
         }
 
-        return new SFVFSPath(sfvfsFileSystem, dataBlocks, newPath);
+        return new SFVFSPath(sfvfsFileSystem, newPath);
     }
 
     @Override

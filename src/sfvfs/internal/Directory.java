@@ -5,9 +5,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import static sfvfs.utils.Preconditions.*;
@@ -33,16 +37,19 @@ public class Directory {
     private final DataBlocks.Block rootBlock;
     private final int lastEntityListInRootBlock;
     private final int maxNameLen;
+    private final int directoryMinSizeToBecomeIndexed;
 
-    public Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen) {
+    public Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen, final int directoryMinSizeToBecomeIndexed) {
         checkNotNull(dataBlocks, "dataBlocks");
         checkArgument(address > 0, "address must be more than 0: %s", address);
         checkArgument(maxNameLen > 0, "max len must be more than 0 %s", maxNameLen);
+        checkArgument(directoryMinSizeToBecomeIndexed > 0, "directory min size to become indexed must be more than 0 %s", directoryMinSizeToBecomeIndexed);
 
         this.dataBlocks = dataBlocks;
         this.rootBlock = dataBlocks.getBlock(address);
         this.lastEntityListInRootBlock = rootBlock.size() / PTRLEN - 1;
         this.maxNameLen = maxNameLen;
+        this.directoryMinSizeToBecomeIndexed = directoryMinSizeToBecomeIndexed;
 
         checkArgument(rootBlock.size() > 2 * maxNameLen, "block size must be at least 2 times bigger than max len");
     }
@@ -98,13 +105,21 @@ public class Directory {
 
         checkState(find(name) == null, "element %s already exists", name);
 
-        getEntityList(name).addEntity(name, address, flags);
+        //noinspection ConstantConditions
+        getEntityList(name, true).addEntity(name, address, flags);
+
+        tryConvertToIndexed();
     }
 
     public DirectoryEntity find(final String name) throws IOException {
         checkNotNull(name, "name");
 
-        final Iterator<DirectoryEntity> entityIterator = getEntityList(name).listEntities();
+        final EntityList entityList = getEntityList(name, false);
+        if (entityList == null) {
+            return null;
+        }
+
+        final Iterator<DirectoryEntity> entityIterator = entityList.listEntities();
         while (entityIterator.hasNext()) {
             final DirectoryEntity entity = entityIterator.next();
             if (entity.getName().equals(name)) {
@@ -118,7 +133,19 @@ public class Directory {
     public void removeEntity(final String name) throws IOException {
         checkNotNull(name, "name");
 
-        getEntityList(name).remove(name);
+        final EntityList entityList = getEntityList(name, false);
+        if (entityList != null) {
+            entityList.remove(name);
+
+            if (entityList.size() == 0 && getFlags().isIndexed()) {
+                final int listIdId = nameToListId(name);
+                entityList.delete();
+                rootBlock.writeInt(listIdId * PTRLEN, NULL_POINTER);
+
+                log.debug("- entity list directory={} list={} address={}",
+                        rootBlock.getAddress(), listIdId, entityList.entityListRootBlock.getAddress());
+            }
+        }
     }
 
     public void delete() throws IOException {
@@ -147,9 +174,26 @@ public class Directory {
         return result;
     }
 
-    private EntityList getEntityList(final String name) throws IOException {
+    private EntityList getEntityList(final String name, final boolean create) throws IOException {
         if (getFlags().isIndexed()) {
-            throw new UnsupportedOperationException();
+            final int entityListId = nameToListId(name);
+
+            final int entityListBlockAddress = rootBlock.readInt(entityListId * PTRLEN);
+            if (entityListBlockAddress != NULL_POINTER) {
+                return new EntityList(entityListBlockAddress);
+            }
+
+            if (!create) {
+                return null;
+            }
+
+            final DataBlocks.Block entityListBlock = dataBlocks.allocateBlock();
+            entityListBlock.clear();
+            rootBlock.writeInt(entityListId * PTRLEN, entityListBlock.getAddress());
+
+            log.debug("+ entity list directory={} list={} address={}", rootBlock.getAddress(), entityListId, entityListBlock.getAddress());
+
+            return new EntityList(entityListBlock.getAddress());
         } else {
             return new EntityList(rootBlock.readInt(FIRST_ENTITY_LIST_BLOCK_IDX * PTRLEN));
         }
@@ -157,6 +201,68 @@ public class Directory {
 
     private Flags.DirectoryFlags getFlags() throws IOException {
         return new Flags.DirectoryFlags(rootBlock.readInt(FLAGS_IDX * PTRLEN));
+    }
+
+    private void tryConvertToIndexed() throws IOException {
+        final Flags.DirectoryFlags flags = getFlags();
+
+        if (flags.isIndexed()) {
+            return;
+        }
+
+        final EntityList singleEntityList = new EntityList(rootBlock.readInt(FIRST_ENTITY_LIST_BLOCK_IDX * PTRLEN));
+        if (singleEntityList.size() < directoryMinSizeToBecomeIndexed) {
+            return;
+        }
+
+        final Map<Integer, EntityList> entityListById = new HashMap<>();
+        final Iterator<DirectoryEntity> entityIterator = singleEntityList.listEntities();
+
+        while (entityIterator.hasNext()) {
+            final DirectoryEntity entity = entityIterator.next();
+            final EntityList entityList = entityListById.computeIfAbsent(nameToListId(entity.getName()), (id) -> {
+                try {
+                    final DataBlocks.Block entityListBlock = dataBlocks.allocateBlock();
+                    entityListBlock.clear();
+                    return new EntityList(entityListBlock.getAddress());
+                } catch (final IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            entityList.addEntity(entity.getName(), entity.getAddress(), entity.getFlags());
+        }
+
+        singleEntityList.delete();
+
+        final ByteBuffer rootBlockNewData = ByteBuffer.wrap(new byte[rootBlock.size()]);
+        flags.setIndexed(true);
+        rootBlockNewData.putInt(FLAGS_IDX * PTRLEN, flags.value());
+
+        entityListById.forEach((id, list) -> rootBlockNewData.putInt(id * PTRLEN, list.entityListRootBlock.getAddress()));
+
+        rootBlock.write(rootBlockNewData.array());
+
+        log.debug("indexed {}", this);
+    }
+
+    private int nameToListId(final String name) {
+        final MessageDigest messageDigest;
+        try {
+            messageDigest = MessageDigest.getInstance("SHA-256");
+        } catch (final NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+        messageDigest.update(name.getBytes());
+        final int nameHashCode = Math.abs(new String(messageDigest.digest()).hashCode());
+
+        final int bucketSize = Integer.MAX_VALUE / (lastEntityListInRootBlock - FIRST_ENTITY_LIST_BLOCK_IDX);
+
+        final int result = (nameHashCode / bucketSize) + FIRST_ENTITY_LIST_BLOCK_IDX;
+
+        checkState(result >= FIRST_ENTITY_LIST_BLOCK_IDX && result <= lastEntityListInRootBlock,
+                "unexpected block id %s for %s", result, name);
+        return result;
     }
 
     @Override
@@ -362,7 +468,7 @@ public class Directory {
                 }
 
                 dataBlocks.deallocateBlock(currentListBlock.getAddress());
-                log.debug("- entity {} with list part, list={} prev={} next={} gone=",
+                log.debug("- entity {} with list part, list={} prev={} next={} gone={}",
                         node.getAddress(), entityListRootBlock.getAddress(), prevListBlock.getAddress(),
                         currentBlockNextBlockAddress, currentListBlock.getAddress());
             }
@@ -470,7 +576,7 @@ public class Directory {
             void write(final ByteBuffer byteBuffer, final int offset) {
                 final int freeSpace = byteBuffer.array().length - offset;
                 final int length = length();
-                checkState(freeSpace >= length, "not enough space {}, {}", freeSpace, length);
+                checkState(freeSpace >= length, "not enough space %s, %s", freeSpace, length);
 
                 byteBuffer.position(offset);
                 byteBuffer.putInt(address);

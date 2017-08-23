@@ -12,6 +12,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -329,6 +332,25 @@ class SFVFSFilesystemTest {
         }};
 
         assertEquals(expected, entities);
+    }
+
+    @Test
+    void differentThreadAccessProhibited() throws IOException, InterruptedException {
+        final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/origin_dir"));
+
+        final Future<?> result = Executors.newSingleThreadExecutor().submit(() -> {
+            try {
+                Files.createDirectory(path);
+            } catch (final IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        try {
+            result.get();
+            fail("exception expected");
+        } catch (final ExecutionException ignore) {
+        }
     }
 
 }

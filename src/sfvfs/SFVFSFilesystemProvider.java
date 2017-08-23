@@ -52,11 +52,13 @@ import static sfvfs.utils.Preconditions.checkState;
  */
 public class SFVFSFilesystemProvider extends FileSystemProvider {
 
-    public static final int BLOCK_SIZE = 1024;
-    public static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 4;
-    public static final String MODE = "rw";
-    public static final int MAX_NAME_LEN = 255;
-    static final int ROOT_DATA_BLOCK_ADDRESS = 1;
+    private static final int BLOCK_SIZE = 1024;
+    private static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 4;
+    private static final String MODE = "rw";
+    private static final int DIR_MAX_NAME_LEN = 255;
+    private static final int DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED = 100;
+
+    private static final int ROOT_DATA_BLOCK_ADDRESS = 1;
 
     private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemProvider.class);
 
@@ -84,11 +86,11 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
             if (createNew) {
                 final DataBlocks.Block rootDirBlock = dataBlocks.allocateBlock();
                 checkState(rootDirBlock.getAddress() == ROOT_DATA_BLOCK_ADDRESS, "root block must have address 1");
-                final Directory rootDirectory = new Directory(dataBlocks, rootDirBlock.getAddress(), MAX_NAME_LEN);
+                final Directory rootDirectory = new Directory(dataBlocks, rootDirBlock.getAddress(), DIR_MAX_NAME_LEN, DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED);
                 rootDirectory.create();
             }
 
-            final SFVFSFileSystem fileSystem = new SFVFSFileSystem(this, dataBlocks);
+            final SFVFSFileSystem fileSystem = new SFVFSFileSystem(this, dataBlocks, ROOT_DATA_BLOCK_ADDRESS, DIR_MAX_NAME_LEN, DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED);
             fileSystems.put(dataFilePath, fileSystem);
 
             return fileSystem;
