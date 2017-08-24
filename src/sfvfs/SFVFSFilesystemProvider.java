@@ -7,6 +7,7 @@ import sfvfs.internal.Directory;
 import sfvfs.internal.DirectoryEntity;
 import sfvfs.internal.Flags;
 import sfvfs.internal.Inode;
+import sfvfs.utils.IOUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -56,7 +57,9 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
     private static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 4;
     private static final String MODE = "rw";
     private static final int DIR_MAX_NAME_LEN = 255;
-    private static final int DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED = 100;
+    private static final int DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED = 40;
+    private static final int MAX_BLOCKS = 10 * 1024 * 1024;
+    private static final int FREE_LOGICAL_ADDRESS_CACHE_SIZE = 1000;
 
     private static final int ROOT_DATA_BLOCK_ADDRESS = 1;
 
@@ -82,7 +85,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
                 checkState(dataFile.createNewFile(), "can't create file %s", dataFile.getAbsolutePath());
             }
 
-            final DataBlocks dataBlocks = new DataBlocks(dataFile, BLOCK_SIZE, BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE, MODE);
+            final DataBlocks dataBlocks = new DataBlocks(dataFile, BLOCK_SIZE, BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE, MODE, MAX_BLOCKS, FREE_LOGICAL_ADDRESS_CACHE_SIZE);
             if (createNew) {
                 final DataBlocks.Block rootDirBlock = dataBlocks.allocateBlock();
                 checkState(rootDirBlock.getAddress() == ROOT_DATA_BLOCK_ADDRESS, "root block must have address 1");
@@ -157,11 +160,13 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
         final Iterator<DirectoryEntity> iter = directory.listEntities();
 
         return new DirectoryStream<Path>() {
+
             private boolean closed;
             private boolean iterReturned;
 
             @Override
             public Iterator<Path> iterator() {
+
                 checkState(!closed, "closed");
                 checkState(!iterReturned, "iterator already returned");
                 iterReturned = false;
@@ -458,17 +463,31 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
             final Inode source = sfvfsFileSystem.getInode(st.sourceEntry.getAddress());
             try (final InputStream readStream = source.readStream()) {
                 try(final OutputStream appendStream = newInode.appendStream()) {
-                    final byte[] buffer = new byte[BLOCK_SIZE];
-                    int len;
-                    while ((len = readStream.read(buffer)) != -1) {
-                        appendStream.write(buffer, 0, len);
-                    }
+                    IOUtils.copy(readStream, appendStream, 512);
                 }
             }
 
             log.info("copied inode {} {} from={} to={} name={}",
                     st.sourceEntry.getName(), st.sourceEntry.getAddress(), st.sourceParentDirectory.getRootBlockAddress(),
                     st.resolvedTargetDir.getRootBlockAddress(), st.resolvedTargetName);
+        }
+    }
+
+    void unRegisterFs(final SFVFSFileSystem fileSystem) {
+        checkState(!fileSystem.isOpen(), "system still open");
+        synchronized (fileSystems) {
+            String key = null;
+            for (final Map.Entry<String, FileSystem> fileSystemEntry : fileSystems.entrySet()) {
+                if (fileSystemEntry.getValue() == fileSystem) {
+                    key = fileSystemEntry.getKey();
+                    break;
+                }
+            }
+
+            if (key != null) {
+                log.info("fs unregistered {}", key);
+                fileSystems.remove(key);
+            }
         }
     }
 
@@ -591,6 +610,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
         log.debug("new read channel {}", sfvfsPath.getFSPath());
 
         return new SeekableByteChannel() {
+
             private long read = 0;
 
             public boolean isOpen() {
@@ -671,6 +691,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
 
         final WritableByteChannel wbc = Channels.newChannel(inode.appendStream());
         return new SeekableByteChannel() {
+
             private long written = size();
 
             public boolean isOpen() {

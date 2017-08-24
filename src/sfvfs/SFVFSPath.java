@@ -203,6 +203,6 @@ public class SFVFSPath implements Path {
 
     @Override
     public String toString() {
-        return "Path " + path;
+        return path;
     }
 }

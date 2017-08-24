@@ -60,9 +60,12 @@ public class SFVFSFileSystem extends FileSystem {
 
     @Override
     public void close() throws IOException {
+        checkThread();
+
         open = false;
         try {
             dataBlocks.close();
+            provider.unRegisterFs(this);
         } catch (final Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -159,13 +162,13 @@ public class SFVFSFileSystem extends FileSystem {
         };
     }
 
-    Directory getRootDirectory() {
+    Directory getRootDirectory() throws IOException {
         checkThread();
 
         return getDirectory(rootDirAddress);
     }
 
-    Directory getDirectory(final int address) {
+    Directory getDirectory(final int address) throws IOException {
         checkThread();
 
         return new Directory(dataBlocks, address, dirMaxNameLen, directoryMinSizeToBecomeIndexed);

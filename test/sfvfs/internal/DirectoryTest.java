@@ -30,7 +30,7 @@ class DirectoryTest {
     void setUp() throws IOException {
         tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
-        dataBlocks = new DataBlocks(tempFile, 64, 2, "rw");
+        dataBlocks = new DataBlocks(tempFile, 64, 2, "rw", 10 * 1024, 100);
         r = new Random(0);
     }
 
@@ -130,7 +130,7 @@ class DirectoryTest {
 
     @Test
     void addALotEntitiesToIndexedDir() throws IOException {
-        final DataBlocks dataBlocks = new DataBlocks(tempFile, 1024, 2, "rw");
+        final DataBlocks dataBlocks = new DataBlocks(tempFile, 1024, 2, "rw", 10 * 1024, 100);
 
         final DataBlocks.Block block = dataBlocks.allocateBlock();
         final Directory directory = new Directory(dataBlocks, block.getAddress(), 30, 10);

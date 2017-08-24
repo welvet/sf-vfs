@@ -26,7 +26,7 @@ class InodeTest {
     void setUp() throws IOException {
         final File tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
-        dataBlocks = new DataBlocks(tempFile, 64, 2, "rw");
+        dataBlocks = new DataBlocks(tempFile, 64, 2, "rw", 100 * 1024, 100);
         r = new Random(0);
     }
 

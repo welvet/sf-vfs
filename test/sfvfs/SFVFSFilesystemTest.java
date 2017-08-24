@@ -353,4 +353,20 @@ class SFVFSFilesystemTest {
         }
     }
 
+    @Test
+    void closeAndOpenFS() throws IOException {
+        final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/");
+
+        final Path root = Paths.get(uri);
+        Files.createDirectory(root.resolve("dir"));
+        Files.write(root.resolve("dir/file.txt"), "abc".getBytes(), StandardOpenOption.CREATE_NEW);
+
+        root.getFileSystem().close();
+
+        final Path reopenedRoot = Paths.get(uri);
+
+        assertTrue(Files.exists(reopenedRoot.resolve("dir")));
+        assertEquals("abc", Files.readAllLines(reopenedRoot.resolve("dir/file.txt")).get(0));
+    }
+
 }

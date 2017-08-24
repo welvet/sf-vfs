@@ -39,7 +39,7 @@ public class Directory {
     private final int maxNameLen;
     private final int directoryMinSizeToBecomeIndexed;
 
-    public Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen, final int directoryMinSizeToBecomeIndexed) {
+    public Directory(final DataBlocks dataBlocks, final int address, final int maxNameLen, final int directoryMinSizeToBecomeIndexed) throws IOException {
         checkNotNull(dataBlocks, "dataBlocks");
         checkArgument(address > 0, "address must be more than 0: %s", address);
         checkArgument(maxNameLen > 0, "max len must be more than 0 %s", maxNameLen);

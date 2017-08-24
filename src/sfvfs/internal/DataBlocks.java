@@ -6,8 +6,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Queue;
 
 import static sfvfs.utils.Preconditions.*;
 
@@ -16,8 +19,12 @@ import static sfvfs.utils.Preconditions.*;
  */
 public class DataBlocks implements AutoCloseable {
 
+    public static final int MAX_BLOCKS_MAX_VALUE = 10 * 1024 * 1024;
+
     private static final int FREE_BLOCKS_NOT_INITIALIZED = -1;
     private static final int FIRST_AVAILABLE_BLOCK = 1;
+    private static final int NULL_POINTER = 0;
+    private static final int PTRLEN = 4;
 
     private static final Logger log = LoggerFactory.getLogger(DataBlocks.class);
 
@@ -25,41 +32,85 @@ public class DataBlocks implements AutoCloseable {
     private final int groupSize;
     private final int blocksInGroup;
     private final int blockGroupsWithFreeBlocksCacheSize;
+    private final int dataFileOffset;
+    private final int maxBlocks;
+    private final int freeLogicalAddressCacheSize;
     private final RandomAccessFile dataFile;
 
     private final Map<Integer, BlockGroup> blockGroupsWithFreeBlocks = new HashMap<>();
+    private final Queue<Integer> freeLogicalAddressCache;
+    private int addressMappingVersion;
     private int allocatedGroups;
 
-    public DataBlocks(final File file, final int blockSize, final int blockGroupsWithFreeBlocksCacheSize, final String mode) throws IOException {
+    private int circularBlockGroupAllocationLastIndex = 0;
+    private int circularLogicalAddressAllocationLastIndex = 0;
+
+    public DataBlocks(
+            final File file,
+            final int blockSize,
+            final int blockGroupsWithFreeBlocksCacheSize,
+            final String mode,
+            final int maxBlocks,
+            final int freeLogicalAddressCacheSize
+    ) throws IOException {
+        checkNotNull(file, "file");
         checkArgument(blockSize > 0, "block size must be more than zero");
         checkArgument(((blockSize & -blockSize) == blockSize), "block size must be power of 2");
-        checkNotNull(file, "file");
+        checkArgument(freeLogicalAddressCacheSize > 0, "free logical address cache must be more than 0");
+        checkArgument(maxBlocks <= MAX_BLOCKS_MAX_VALUE, "max blocks can't be more than %s", MAX_BLOCKS_MAX_VALUE);
+        checkArgument(maxBlocks > 0, "max blocks size must be more than 0");
+        checkArgument(maxBlocks % blockSize == 0, "max blocks must be divisible by block size");
 
         this.dataFile = new RandomAccessFile(file, mode);
 
         this.blockSize = blockSize;
         this.groupSize = blockSize * blockSize;
         this.blocksInGroup = blockSize;
-        this.allocatedGroups = (int) (this.dataFile.length() / groupSize);
         this.blockGroupsWithFreeBlocksCacheSize = blockGroupsWithFreeBlocksCacheSize;
+        this.maxBlocks = maxBlocks;
+        this.freeLogicalAddressCacheSize = freeLogicalAddressCacheSize;
+
+        this.freeLogicalAddressCache = new ArrayDeque<>(freeLogicalAddressCacheSize);
 
         log.info("blocks created on {} blocks size {} mode {}", file.getAbsoluteFile(), blockSize, mode);
+
+        final int logicalAddressMappingRegionLen = maxBlocks * PTRLEN;
+        dataFileOffset = logicalAddressMappingRegionLen;
+        if (dataFile.length() == 0) {
+            final byte[] empty = new byte[blockSize];
+            for (int i = 0; i <logicalAddressMappingRegionLen; i += blockSize) {
+                dataFile.write(empty);
+            }
+            checkState(dataFile.length() == dataFileOffset, "wrong file size");
+            log.debug("logical address mapping region allocated 0 {}", logicalAddressMappingRegionLen);
+        }
+
+        final long blocksDataLen = this.dataFile.length() - dataFileOffset;
+        checkState(blocksDataLen % groupSize == 0, "block size doesn't match file size");
+        this.allocatedGroups = (int) (blocksDataLen / groupSize);
     }
 
     public Block allocateBlock() throws IOException {
         if (blockGroupsWithFreeBlocks.isEmpty()) {
+            int nextCircularBlockGroupAllocationLasIndex = 0;
+
             for (int i = 0; i < allocatedGroups; i++) {
-                final BlockGroup blockGroup = getBlockGroup(i);
+                final int groupId = (i + circularBlockGroupAllocationLastIndex) % allocatedGroups;
+                nextCircularBlockGroupAllocationLasIndex = groupId;
+
+                final BlockGroup blockGroup = getBlockGroup(groupId);
 
                 if (blockGroup.hasFreeBlocks()) {
-                    blockGroupsWithFreeBlocks.put(i, blockGroup);
+                    blockGroupsWithFreeBlocks.put(groupId, blockGroup);
                     if (blockGroupsWithFreeBlocks.size() >= blockGroupsWithFreeBlocksCacheSize) {
                         break;
                     }
                 }
             }
+            circularBlockGroupAllocationLastIndex = nextCircularBlockGroupAllocationLasIndex;
 
             while (blockGroupsWithFreeBlocks.size() < blockGroupsWithFreeBlocksCacheSize) {
+                circularBlockGroupAllocationLastIndex++;
                 final BlockGroup newGroup = new BlockGroup(allocatedGroups++);
                 blockGroupsWithFreeBlocks.put(newGroup.id, newGroup);
                 log.debug("group allocated {} {} - {}", newGroup.id, newGroup.id * groupSize, (newGroup.id + 1) * groupSize);
@@ -78,9 +129,11 @@ public class DataBlocks implements AutoCloseable {
 
     }
 
-    void deallocateBlock(final int blockAddress) throws IOException {
-        final BlockGroup blockGroup = getBlockGroup(blockAddress / blocksInGroup);
-        blockGroup.deallocateBlock(blockAddress % blocksInGroup);
+    void deallocateBlock(final int logicalBlockAddress) throws IOException {
+        final int physicalBlockAddress = resolvePhysicalAddress(logicalBlockAddress);
+        final BlockGroup blockGroup = getBlockGroup(physicalBlockAddress / blocksInGroup);
+        blockGroup.deallocateBlock(physicalBlockAddress % blocksInGroup);
+        releaseLogicalAddress(logicalBlockAddress);
 
         if (blockGroupsWithFreeBlocks.size() < blockGroupsWithFreeBlocksCacheSize) {
             if (!blockGroupsWithFreeBlocks.containsKey(blockGroup.id)) {
@@ -90,10 +143,79 @@ public class DataBlocks implements AutoCloseable {
         }
     }
 
-    public Block getBlock(final int blockAddress) {
-        checkArgument(blockAddress > 0, "block address must be more than 0");
-        //no allocation check
-        return new Block(blockAddress);
+    Block getBlock(final int logicalAddress) throws IOException {
+        checkArgument(logicalAddress > 0, "block address must be more than 0");
+
+        final int physicalAddress = resolvePhysicalAddress(logicalAddress);
+        return new Block(logicalAddress, physicalAddress);
+    }
+
+    public void compact() throws IOException {
+        if (log.isInfoEnabled()) {
+            log.info("compact start blocks={} free={} fsize={}", getTotalBlocks(), getFreeBlocks(), dataFile.length());
+        }
+
+        int startGroup = 0;
+        int endGroup = allocatedGroups - 1;
+
+        BlockGroup sourceBlockGroup = null;
+        BlockGroup targetBlockGroup = null;
+
+        final int[] physicalToLogicalAddress = obtainAllPhysicalToLogicalAddressMap();
+
+        while (startGroup < endGroup) {
+            while (targetBlockGroup == null && startGroup < endGroup) {
+                targetBlockGroup = new BlockGroup(startGroup++);
+                if (!targetBlockGroup.hasFreeBlocks()) {
+                    targetBlockGroup = null;
+                }
+            }
+
+            while (sourceBlockGroup == null && endGroup > startGroup) {
+                sourceBlockGroup = new BlockGroup(endGroup--);
+                if (sourceBlockGroup.isEmpty()) {
+                    sourceBlockGroup.deallocateGroup();
+                    sourceBlockGroup = null;
+                }
+            }
+
+            if (targetBlockGroup != null && sourceBlockGroup != null) {
+                while (targetBlockGroup.hasFreeBlocks() && !sourceBlockGroup.isEmpty()) {
+                    final int sourceBlockIdInGroup = sourceBlockGroup.nextAllocatedBlockIdFromCache();
+                    final int sourceBlockPhysicalAddress = sourceBlockGroup.id * blocksInGroup + sourceBlockIdInGroup;
+                    final int sourceBlockLogicalAddress = physicalToLogicalAddress[sourceBlockPhysicalAddress];
+                    checkState(sourceBlockLogicalAddress != NULL_POINTER, "logical address %s no taken but assigned to %s",
+                            sourceBlockLogicalAddress, sourceBlockPhysicalAddress);
+
+                    final Block sourceBlock = new Block(sourceBlockLogicalAddress, sourceBlockPhysicalAddress);
+                    final Block targetBlock = targetBlockGroup.allocateBlock();
+
+                    targetBlock.write(sourceBlock.read());
+
+                    reassignPhysicalAddress(sourceBlockLogicalAddress, sourceBlockPhysicalAddress, targetBlock.physicalAddress);
+
+                    sourceBlockGroup.deallocateBlock(sourceBlockIdInGroup);
+
+                }
+
+                if (!targetBlockGroup.hasFreeBlocks()) {
+                    targetBlockGroup = null;
+                }
+
+                if (sourceBlockGroup.isEmpty()) {
+                    sourceBlockGroup.deallocateGroup();
+                    sourceBlockGroup = null;
+                }
+            }
+        }
+
+        freeLogicalAddressCache.clear();
+        blockGroupsWithFreeBlocks.clear();
+        addressMappingVersion++;
+
+        if (log.isInfoEnabled()) {
+            log.info("compact competed blocks={} free={} fsize={}", getTotalBlocks(), getFreeBlocks(), dataFile.length());
+        }
     }
 
     public int getTotalBlocks() throws IOException {
@@ -115,13 +237,109 @@ public class DataBlocks implements AutoCloseable {
 
     void debugPrintBlockUsage() throws IOException {
         for (int i = 0; i < allocatedGroups; i++) {
-            log.info("group {} free {}", i, getBlockGroup(i).getFreeBlocks());
+            log.info("group {} free {}", i, new BlockGroup(i).getFreeBlocks());
         }
     }
 
     @Override
     public void close() throws Exception {
         dataFile.close();
+    }
+
+    private int acquireLogicalAddress(final int physicalAddress) throws IOException {
+        checkArgument(physicalAddress > 0, "physicalAddress must be more than 0");
+        if (freeLogicalAddressCache.isEmpty()) {
+            int nextCircularLogicalAddressAllocationLastIndex = 0;
+
+            for (int i = 0; i < maxBlocks; i++) {
+                final int logicalAddress = (i + circularLogicalAddressAllocationLastIndex) % maxBlocks;
+                nextCircularLogicalAddressAllocationLastIndex = logicalAddress;
+
+                if (logicalAddress < FIRST_AVAILABLE_BLOCK) {
+                    continue;
+                }
+
+                dataFile.seek(logicalAddress * PTRLEN);
+                final int associatedPhysicalAddress = dataFile.readInt();
+
+                if (associatedPhysicalAddress == NULL_POINTER) {
+                    freeLogicalAddressCache.add(logicalAddress);
+                    if (freeLogicalAddressCache.size() >= freeLogicalAddressCacheSize) {
+                        break;
+                    }
+                }
+            }
+
+            circularLogicalAddressAllocationLastIndex = nextCircularLogicalAddressAllocationLastIndex;
+        }
+
+
+        checkState(!freeLogicalAddressCache.isEmpty(), "no empty blocks left");
+
+        final Integer logicalAddress = freeLogicalAddressCache.poll();
+        dataFile.seek(logicalAddress * PTRLEN);
+        dataFile.writeInt(physicalAddress);
+
+        log.debug("address mapping created {} -> {}", logicalAddress, physicalAddress);
+
+        return logicalAddress;
+    }
+
+    private int resolvePhysicalAddress(final int logicalAddress) throws IOException {
+        checkArgument(logicalAddress > 0, "logicalAddress must be more than 0");
+
+        dataFile.seek(logicalAddress * PTRLEN);
+        final int associatedPhysicalAddress = dataFile.readInt();
+
+        checkState(associatedPhysicalAddress != NULL_POINTER, "address %s not allocated", logicalAddress);
+
+        return associatedPhysicalAddress;
+    }
+
+    private void reassignPhysicalAddress(final int logicalAddress, final int oldPhysicalAddress, final int newPhysicalAddress) throws IOException {
+        checkArgument(logicalAddress > 0, "logicalAddress must be more than 0");
+        checkArgument(oldPhysicalAddress > 0, "oldPhysicalAddress must be more than 0");
+        checkArgument(newPhysicalAddress > 0, "newPhysicalAddress must be more than 0");
+        checkArgument(oldPhysicalAddress != newPhysicalAddress, "oldPhysicalAddress and newPhysicalAddress must be different");
+
+        dataFile.seek(logicalAddress * PTRLEN);
+        final int associatedPhysicalAddress = dataFile.readInt();
+
+        checkState(associatedPhysicalAddress == oldPhysicalAddress, "wrong old physical address %s %s",
+                associatedPhysicalAddress, oldPhysicalAddress);
+
+        dataFile.seek(logicalAddress * PTRLEN);
+        dataFile.writeInt(newPhysicalAddress);
+
+        log.debug("address mapping updated {} -> {} (was={})", logicalAddress, newPhysicalAddress, oldPhysicalAddress);
+    }
+
+    private int[] obtainAllPhysicalToLogicalAddressMap() throws IOException {
+        final int[] physicalToLogicalAddress = new int[maxBlocks];
+
+        for (int logicalAddress = FIRST_AVAILABLE_BLOCK; logicalAddress < maxBlocks; logicalAddress++) {
+            dataFile.seek(logicalAddress * PTRLEN);
+
+            final int physicalAddress = dataFile.readInt();
+            if (physicalAddress != NULL_POINTER) {
+                physicalToLogicalAddress[physicalAddress] = logicalAddress;
+            }
+        }
+
+        return physicalToLogicalAddress;
+    }
+
+    private void releaseLogicalAddress(final int logicalAddress) throws IOException {
+        checkArgument(logicalAddress > 0, "logicalAddress must be more than 0");
+
+        dataFile.seek(logicalAddress * PTRLEN);
+        dataFile.writeInt(NULL_POINTER);
+
+        log.debug("address mapping released {}", logicalAddress);
+
+        if (freeLogicalAddressCache.size() >= freeLogicalAddressCacheSize) {
+            freeLogicalAddressCache.add(logicalAddress);
+        }
     }
 
     private BlockGroup getBlockGroup(final int id) throws IOException {
@@ -135,14 +353,17 @@ public class DataBlocks implements AutoCloseable {
 
     private class BlockGroup {
         private final int id;
-        private int freeBlocks = FREE_BLOCKS_NOT_INITIALIZED;
         private final byte[] cachedMetaBlockData;
+
+        private int freeBlocks = FREE_BLOCKS_NOT_INITIALIZED;
+        private int circularFreeBlockLastIndex = 0;
+        private Deque<Integer> nextAllocatedBlockCache = new ArrayDeque<>();
 
         BlockGroup(final int id) throws IOException {
             this.id = id;
 
-            if (dataFile.length() < id * groupSize) {
-                dataFile.seek(id * groupSize);
+            if (dataFile.length() <= dataFileOffset + id * groupSize) {
+                dataFile.seek(dataFileOffset + id * groupSize);
                 final byte[] emptyBytes = new byte[blockSize];
                 for (int i = 0; i < blocksInGroup; i++) {
                     dataFile.write(emptyBytes);
@@ -150,8 +371,10 @@ public class DataBlocks implements AutoCloseable {
 
                 cachedMetaBlockData = emptyBytes;
                 freeBlocks = blocksInGroup - 1;
+
+                log.debug("group allocated {}", id);
             } else {
-                dataFile.seek(id * groupSize);
+                dataFile.seek(dataFileOffset + id * groupSize);
                 final byte[] blockData = new byte[blockSize];
                 dataFile.read(blockData);
 
@@ -165,6 +388,12 @@ public class DataBlocks implements AutoCloseable {
             return freeBlocks > 0;
         }
 
+        boolean isEmpty() throws IOException {
+            initFreeBlocksCounter();
+
+            return freeBlocks == blocksInGroup - FIRST_AVAILABLE_BLOCK;
+        }
+
         int getFreeBlocks() throws IOException {
             initFreeBlocksCounter();
 
@@ -175,25 +404,37 @@ public class DataBlocks implements AutoCloseable {
             initFreeBlocksCounter();
             checkState(freeBlocks > 0, "no free blocks for %s", id);
 
-            for (int i = FIRST_AVAILABLE_BLOCK; i < blocksInGroup; i++) {
-                final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[i]);
+            int nextCircularFreeBlockLastIndex;
+            for (int i = 0; i < blocksInGroup; i++) {
+                final int blockId = (i + circularFreeBlockLastIndex) % blocksInGroup;
+                nextCircularFreeBlockLastIndex = blockId;
+                if (blockId < FIRST_AVAILABLE_BLOCK) {
+                    continue;
+                }
+
+                final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[blockId]);
 
                 if (!currentBlockFlags.isTaken()) {
                     currentBlockFlags.setTaken(true);
 
                     freeBlocks--;
-                    updateBlockData(i, currentBlockFlags);
+                    updateBlockData(blockId, currentBlockFlags);
 
-                    log.debug("<- block {} group {}", i, id);
+                    log.debug("<- block={} group={}", blockId, id);
 
-                    return new Block(id * blocksInGroup + i);
+                    final int physicalAddress = id * blocksInGroup + blockId;
+                    final int logicalAddress = acquireLogicalAddress(physicalAddress);
+
+                    circularFreeBlockLastIndex = nextCircularFreeBlockLastIndex;
+                    nextAllocatedBlockCache = null;
+
+                    return new Block(logicalAddress, physicalAddress);
                 }
 
             }
 
             throw new IllegalStateException("no free blocks " + id);
         }
-
 
         void deallocateBlock(final int blockId) throws IOException {
             initFreeBlocksCounter();
@@ -206,10 +447,40 @@ public class DataBlocks implements AutoCloseable {
             log.debug("-> block {} group {}", blockId, id);
         }
 
+        int nextAllocatedBlockIdFromCache() {
+            if (nextAllocatedBlockCache == null || nextAllocatedBlockCache.isEmpty()) {
+                nextAllocatedBlockCache = new ArrayDeque<>();
+
+                for (int blockId = FIRST_AVAILABLE_BLOCK; blockId < blocksInGroup; blockId++) {
+                    final Flags.BlockGroupFlags currentBlockFlags = new Flags.BlockGroupFlags(cachedMetaBlockData[blockId]);
+                    if (currentBlockFlags.isTaken()) {
+                        nextAllocatedBlockCache.add(blockId);
+                    }
+                }
+            }
+
+            return nextAllocatedBlockCache.pop();
+        }
+
+        void deallocateGroup() throws IOException {
+            checkState(allocatedGroups > 0, "group must be more than 0");
+            checkState(allocatedGroups - 1 == id, "can't release non last group %s %s", allocatedGroups, id);
+
+            final int oldLength = (int) dataFile.length();
+            final int newLength = dataFileOffset + (id) * groupSize;
+
+            checkState(newLength == oldLength - groupSize, "unexpected new length %s %s", newLength, oldLength);
+            dataFile.setLength(newLength);
+
+            allocatedGroups--;
+
+            log.debug("group release {} (len old={} new={})", id, oldLength, newLength);
+        }
+
         private void updateBlockData(final int blockId, final Flags.BlockGroupFlags currentBlockFlags) throws IOException {
             cachedMetaBlockData[blockId] = currentBlockFlags.value();
 
-            dataFile.seek(id * groupSize + blockId);
+            dataFile.seek(dataFileOffset + id * groupSize + blockId);
             dataFile.write(currentBlockFlags.value());
         }
 
@@ -235,14 +506,20 @@ public class DataBlocks implements AutoCloseable {
     }
 
     public class Block {
-        private final int address;
+        private final int addressMappingVersionWhenCreated;
+        private final int logicalAddress;
+        private final int physicalAddress;
 
-        private Block(final int address) {
-            this.address = address;
+        private Block(final int logicalAddress, final int physicalAddress) {
+            this.addressMappingVersionWhenCreated = addressMappingVersion;
+            this.logicalAddress = logicalAddress;
+            this.physicalAddress = physicalAddress;
         }
 
         byte[] read() throws IOException {
-            dataFile.seek(address * blockSize);
+            checkAddressMappingVersion();
+
+            dataFile.seek(dataFileOffset + physicalAddress * blockSize);
             final byte[] result = new byte[blockSize];
             dataFile.read(result);
             return result;
@@ -250,35 +527,45 @@ public class DataBlocks implements AutoCloseable {
 
         int readInt(final int position) throws IOException {
             checkArgument(position >= 0 && position < blockSize, "unexpected position %s", position);
+            checkAddressMappingVersion();
 
-            dataFile.seek(address * blockSize + position);
+            dataFile.seek(dataFileOffset + physicalAddress * blockSize + position);
             return dataFile.readInt();
         }
 
         void write(final byte[] bytes) throws IOException {
             checkArgument(bytes.length <= blockSize, "unexpected block size %s", bytes.length);
+            checkAddressMappingVersion();
 
-            dataFile.seek(address * blockSize);
+            dataFile.seek(dataFileOffset + physicalAddress * blockSize);
             dataFile.write(bytes);
         }
 
         void writeInt(final int position, final int value) throws IOException {
             checkArgument(position >= 0 && position < blockSize, "unexpected position %s", position);
+            checkAddressMappingVersion();
 
-            dataFile.seek(address * blockSize + position);
+            dataFile.seek(dataFileOffset + physicalAddress * blockSize + position);
             dataFile.writeInt(value);
         }
 
         void clear() throws IOException {
+            checkAddressMappingVersion();
             write(new byte[blockSize]);
         }
 
         public int getAddress() {
-            return address;
+            return logicalAddress;
         }
 
         int size() {
             return blockSize;
+        }
+
+        private void checkAddressMappingVersion() throws IOException {
+            if (addressMappingVersion != addressMappingVersionWhenCreated) {
+                throw new IOException("block outdated");
+            }
         }
     }
 
