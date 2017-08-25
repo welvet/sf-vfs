@@ -468,7 +468,7 @@ public class Directory {
                         currentBlockNextBlockAddress, currentListBlock.getAddress());
             }
 
-            entityListRootBlock.writeInt(SIZE_IDX * PTRLEN, size() -1);
+            entityListRootBlock.writeInt(SIZE_IDX * PTRLEN, size() - 1);
         }
 
         void delete() throws IOException {

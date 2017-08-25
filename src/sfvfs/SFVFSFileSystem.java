@@ -18,9 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 
-import static sfvfs.utils.Preconditions.checkArgument;
-import static sfvfs.utils.Preconditions.checkNotNull;
-import static sfvfs.utils.Preconditions.checkState;
+import static sfvfs.utils.Preconditions.*;
 
 /**
  * @author alexey.kutuzov

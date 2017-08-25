@@ -11,13 +11,13 @@ public class Preconditions {
         }
     }
 
-    public static void checkArgument(final boolean argsCorrect, final String template, final Object... args){
+    public static void checkArgument(final boolean argsCorrect, final String template, final Object... args) {
         if (!argsCorrect) {
             throw new IllegalArgumentException(String.format(template, args));
         }
     }
 
-    public static void checkState(final boolean stateCorrect, final String template, final Object... args ) {
+    public static void checkState(final boolean stateCorrect, final String template, final Object... args) {
         if (!stateCorrect) {
             throw new IllegalStateException(String.format(template, args));
         }

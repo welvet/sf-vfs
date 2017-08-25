@@ -463,7 +463,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
 
             final Inode source = sfvfsFileSystem.getInode(st.sourceEntry.getAddress());
             try (final InputStream readStream = source.readStream()) {
-                try(final OutputStream appendStream = newInode.appendStream()) {
+                try (final OutputStream appendStream = newInode.appendStream()) {
                     IOUtils.copy(readStream, appendStream, BLOCK_SIZE);
                 }
             }
@@ -490,77 +490,6 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
                 fileSystems.remove(key);
             }
         }
-    }
-
-    private class SourceToTarget {
-        final Directory sourceParentDirectory;
-        final DirectoryEntity sourceEntry;
-        final Directory resolvedTargetDir;
-        final String resolvedTargetName;
-
-        private SourceToTarget(final Directory sourceParentDirectory, final DirectoryEntity sourceEntry, final Directory resolvedTargetDir, final String resolvedTargetName) {
-            this.sourceParentDirectory = sourceParentDirectory;
-            this.sourceEntry = sourceEntry;
-            this.resolvedTargetDir = resolvedTargetDir;
-            this.resolvedTargetName = resolvedTargetName;
-        }
-    }
-
-    private class SFVFSBasicAttributes implements BasicFileAttributes {
-
-        private final boolean directory;
-        private final long size;
-
-        private SFVFSBasicAttributes(final boolean directory, final long size) {
-            this.directory = directory;
-            this.size = size;
-        }
-
-        @Override
-        public FileTime lastModifiedTime() {
-            return null;
-        }
-
-        @Override
-        public FileTime lastAccessTime() {
-            return null;
-        }
-
-        @Override
-        public FileTime creationTime() {
-            return null;
-        }
-
-        @Override
-        public boolean isRegularFile() {
-            return !directory;
-        }
-
-        @Override
-        public boolean isDirectory() {
-            return directory;
-        }
-
-        @Override
-        public boolean isSymbolicLink() {
-            return false;
-        }
-
-        @Override
-        public boolean isOther() {
-            return false;
-        }
-
-        @Override
-        public long size() {
-            return size;
-        }
-
-        @Override
-        public Object fileKey() {
-            return null;
-        }
-
     }
 
     private DirectoryEntity findEntity(final SFVFSFileSystem fs, final String path) throws IOException {
@@ -729,6 +658,77 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
                 wbc.close();
             }
         };
+    }
+
+    private class SourceToTarget {
+        final Directory sourceParentDirectory;
+        final DirectoryEntity sourceEntry;
+        final Directory resolvedTargetDir;
+        final String resolvedTargetName;
+
+        private SourceToTarget(final Directory sourceParentDirectory, final DirectoryEntity sourceEntry, final Directory resolvedTargetDir, final String resolvedTargetName) {
+            this.sourceParentDirectory = sourceParentDirectory;
+            this.sourceEntry = sourceEntry;
+            this.resolvedTargetDir = resolvedTargetDir;
+            this.resolvedTargetName = resolvedTargetName;
+        }
+    }
+
+    private class SFVFSBasicAttributes implements BasicFileAttributes {
+
+        private final boolean directory;
+        private final long size;
+
+        private SFVFSBasicAttributes(final boolean directory, final long size) {
+            this.directory = directory;
+            this.size = size;
+        }
+
+        @Override
+        public FileTime lastModifiedTime() {
+            return null;
+        }
+
+        @Override
+        public FileTime lastAccessTime() {
+            return null;
+        }
+
+        @Override
+        public FileTime creationTime() {
+            return null;
+        }
+
+        @Override
+        public boolean isRegularFile() {
+            return !directory;
+        }
+
+        @Override
+        public boolean isDirectory() {
+            return directory;
+        }
+
+        @Override
+        public boolean isSymbolicLink() {
+            return false;
+        }
+
+        @Override
+        public boolean isOther() {
+            return false;
+        }
+
+        @Override
+        public long size() {
+            return size;
+        }
+
+        @Override
+        public Object fileKey() {
+            return null;
+        }
+
     }
 
 }

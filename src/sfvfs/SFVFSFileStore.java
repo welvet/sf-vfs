@@ -14,6 +14,7 @@ import static sfvfs.utils.Preconditions.checkNotNull;
  */
 @SuppressWarnings("WeakerAccess")
 public class SFVFSFileStore extends FileStore {
+
     private final DataBlocks dataBlocks;
 
     SFVFSFileStore(final DataBlocks dataBlocks) {
