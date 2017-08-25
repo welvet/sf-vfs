@@ -1,7 +1,5 @@
 # SFVFS is single file virtual file system for Java #
 
-## Solution overview ##
-
 SFVFS supports files and directories. You can create, delete, copy or move any file or directory. Also you can read, write or append files data. SFVFS doesn't support multithreading, has no corruption protection, no file attributes, no random access of files data, no hard- sym- links. SFVFS focus on minimising RAM and disk usage. SFVFS has special compact operation to reduce container size to actual used size. SFVFS is similar to ext2 in a way it's designed.
  
 Block size and amount of maximum blocks has to be specified on SFVFS creation. There is no way to change it after. The amount of (4 * maximum blocks) will be allocated in file and in memory at creation time. Another (4 * maximum blocks) memory will be used during compaction process. 
