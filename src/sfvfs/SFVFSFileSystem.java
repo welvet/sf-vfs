@@ -211,4 +211,5 @@ public class SFVFSFileSystem extends FileSystem {
     private void checkThread() {
         checkState(Thread.currentThread().getId() == workingThreadId, "fs direct access by different than it's creator thread is prohibited, use thread with id %s", workingThreadId);
     }
+
 }

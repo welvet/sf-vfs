@@ -51,6 +51,7 @@ import static sfvfs.utils.Preconditions.checkState;
 /**
  * @author alexey.kutuzov
  */
+@SuppressWarnings("WeakerAccess")
 public class SFVFSFilesystemProvider extends FileSystemProvider {
 
     static final int BLOCK_SIZE = 1024;
@@ -463,7 +464,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
             final Inode source = sfvfsFileSystem.getInode(st.sourceEntry.getAddress());
             try (final InputStream readStream = source.readStream()) {
                 try(final OutputStream appendStream = newInode.appendStream()) {
-                    IOUtils.copy(readStream, appendStream, 512);
+                    IOUtils.copy(readStream, appendStream, BLOCK_SIZE);
                 }
             }
 

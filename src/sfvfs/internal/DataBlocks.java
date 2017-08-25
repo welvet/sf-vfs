@@ -162,7 +162,7 @@ public class DataBlocks implements AutoCloseable {
         BlockGroup sourceBlockGroup = null;
         BlockGroup targetBlockGroup = null;
 
-        final int[] physicalToLogicalAddress = obtainAllPhysicalToLogicalAddressMap();
+        final int[] physicalToLogicalAddressCache = obtainAllPhysicalToLogicalAddressMap();
 
         while (startGroup < endGroup) {
             while (targetBlockGroup == null && startGroup < endGroup) {
@@ -184,7 +184,7 @@ public class DataBlocks implements AutoCloseable {
                 while (targetBlockGroup.hasFreeBlocks() && !sourceBlockGroup.isEmpty()) {
                     final int sourceBlockIdInGroup = sourceBlockGroup.nextAllocatedBlockIdFromCache();
                     final int sourceBlockPhysicalAddress = sourceBlockGroup.id * blocksInGroup + sourceBlockIdInGroup;
-                    final int sourceBlockLogicalAddress = physicalToLogicalAddress[sourceBlockPhysicalAddress];
+                    final int sourceBlockLogicalAddress = physicalToLogicalAddressCache[sourceBlockPhysicalAddress];
                     checkState(sourceBlockLogicalAddress != NULL_POINTER, "logical address %s no taken but assigned to %s",
                             sourceBlockLogicalAddress, sourceBlockPhysicalAddress);
 
@@ -196,7 +196,6 @@ public class DataBlocks implements AutoCloseable {
                     reassignPhysicalAddress(sourceBlockLogicalAddress, sourceBlockPhysicalAddress, targetBlock.physicalAddress);
 
                     sourceBlockGroup.deallocateBlock(sourceBlockIdInGroup);
-
                 }
 
                 if (!targetBlockGroup.hasFreeBlocks()) {
@@ -249,6 +248,7 @@ public class DataBlocks implements AutoCloseable {
 
     private int acquireLogicalAddress(final int physicalAddress) throws IOException {
         checkArgument(physicalAddress > 0, "physicalAddress must be more than 0");
+
         if (freeLogicalAddressCache.isEmpty()) {
             int nextCircularLogicalAddressAllocationLastIndex = 0;
 
@@ -273,7 +273,6 @@ public class DataBlocks implements AutoCloseable {
 
             circularLogicalAddressAllocationLastIndex = nextCircularLogicalAddressAllocationLastIndex;
         }
-
 
         checkState(!freeLogicalAddressCache.isEmpty(), "no empty blocks left");
 

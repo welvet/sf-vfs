@@ -3,9 +3,10 @@ package sfvfs.internal;
 /**
  * @author alexey.kutuzov
  */
+@SuppressWarnings({"SameParameterValue", "WeakerAccess"})
 public class Flags {
 
-    static class BlockGroupFlags {
+    public static class BlockGroupFlags {
 
         private static final byte TAKEN = 0x1;
 
@@ -15,7 +16,7 @@ public class Flags {
             this.flags = flags;
         }
 
-        boolean isTaken() {
+        public boolean isTaken() {
             return (flags & TAKEN) == TAKEN;
         }
 
@@ -30,6 +31,7 @@ public class Flags {
         byte value() {
             return flags;
         }
+
     }
 
     static class InodeFlags {
@@ -43,7 +45,7 @@ public class Flags {
             this.flags = flags;
         }
 
-        boolean isNeedEmptyBlock() {
+        public boolean isNeedEmptyBlock() {
             return (flags & NEED_EMPTY_BLOCK) == NEED_EMPTY_BLOCK;
         }
 
@@ -55,7 +57,7 @@ public class Flags {
             }
         }
 
-        boolean isLocked() {
+        public boolean isLocked() {
             return (flags & LOCKED) == LOCKED;
         }
 
@@ -75,6 +77,7 @@ public class Flags {
         public String toString() {
             return Integer.toBinaryString(flags);
         }
+
     }
 
     static class DirectoryFlags {
@@ -87,7 +90,7 @@ public class Flags {
             this.flags = flags;
         }
 
-        boolean isIndexed() {
+        public boolean isIndexed() {
             return (flags & INDEXED) == INDEXED;
         }
 
@@ -102,6 +105,7 @@ public class Flags {
         int value() {
             return flags;
         }
+
     }
 
     public static class DirectoryListEntityFlags {
@@ -116,11 +120,11 @@ public class Flags {
             this.flags = 0;
         }
 
-        public DirectoryListEntityFlags(final byte flags) {
+        DirectoryListEntityFlags(final byte flags) {
             this.flags = flags;
         }
 
-        boolean isDirectory() {
+        public boolean isDirectory() {
             return (flags & IS_DIRECTORY) == IS_DIRECTORY;
         }
 
@@ -135,6 +139,7 @@ public class Flags {
         byte value() {
             return flags;
         }
+
     }
 
 }

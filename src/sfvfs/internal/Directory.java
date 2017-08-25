@@ -20,6 +20,7 @@ import static sfvfs.utils.Streams.iteratorToStream;
 /**
  * @author alexey.kutuzov
  */
+@SuppressWarnings("WeakerAccess")
 public class Directory {
 
     public static final String NAME_REGEXP = "[A-Za-z0-9${}\\-_.]+";
@@ -96,21 +97,6 @@ public class Directory {
                 .sum();
     }
 
-    public void addEntity(final String name, final int address, final Flags.DirectoryListEntityFlags flags) throws IOException {
-        checkNotNull(name, "name");
-        checkNotNull(flags, "flags");
-        checkArgument(address > 0, "address must be more than 0: %s", address);
-        checkArgument(name.length() <= maxNameLen, "name len must be les than %s: %s", maxNameLen, name);
-        checkArgument(name.matches(NAME_REGEXP), "name doesn't match %s %s", NAME_REGEXP, name);
-
-        checkState(find(name) == null, "element %s already exists", name);
-
-        //noinspection ConstantConditions
-        getEntityList(name, true).addEntity(name, address, flags);
-
-        tryConvertToIndexed();
-    }
-
     public DirectoryEntity find(final String name) throws IOException {
         checkNotNull(name, "name");
 
@@ -128,6 +114,21 @@ public class Directory {
         }
 
         return null;
+    }
+
+    public void addEntity(final String name, final int address, final Flags.DirectoryListEntityFlags flags) throws IOException {
+        checkNotNull(name, "name");
+        checkNotNull(flags, "flags");
+        checkArgument(address > 0, "address must be more than 0: %s", address);
+        checkArgument(name.length() <= maxNameLen, "name len must be les than %s: %s", maxNameLen, name);
+        checkArgument(name.matches(NAME_REGEXP), "name doesn't match %s %s", NAME_REGEXP, name);
+
+        checkState(find(name) == null, "element %s already exists", name);
+
+        //noinspection ConstantConditions
+        getEntityList(name, true).addEntity(name, address, flags);
+
+        tryConvertToIndexed();
     }
 
     public void removeEntity(final String name) throws IOException {

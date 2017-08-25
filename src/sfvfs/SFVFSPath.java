@@ -1,7 +1,5 @@
 package sfvfs;
 
-import sfvfs.internal.DataBlocks;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -21,6 +19,7 @@ import static sfvfs.utils.Preconditions.checkNotNull;
  * @author alexey.kutuzov
  */
 public class SFVFSPath implements Path {
+
     private final SFVFSFileSystem sfvfsFileSystem;
     private final String path;
 
@@ -205,4 +204,5 @@ public class SFVFSPath implements Path {
     public String toString() {
         return path;
     }
+
 }
