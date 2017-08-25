@@ -1,7 +1,10 @@
 package sfvfs;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import sfvfs.utils.IOUtils;
 
 import java.io.File;
@@ -26,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  * @author alexey.kutuzov
  */
 class SFVFSFilesystemRealDataTest {
+    
+    private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemRealDataTest.class); 
 
     private Random r;
 
@@ -74,6 +79,43 @@ class SFVFSFilesystemRealDataTest {
         checkData(localfsPath, rootReopened.resolve("inner3"), false);
     }
 
+    @Test
+    @Disabled
+    void pTest() throws IOException {
+        System.out.println("mem: " + Runtime.getRuntime().maxMemory() );
+        System.out.println();
+
+        for (int i = 0; i < 3; i++) {
+            final Path localfsPath = Paths.get("/Users/alexey.kutuzov/software/backend/modules/persist");
+            final File dataFile = createDataFile();
+
+            final long l = System.currentTimeMillis();
+
+            final Path sfvfsRoot = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
+
+            uploadData(localfsPath, sfvfsRoot.resolve("inner"));
+
+            Files.copy(sfvfsRoot.resolve("inner"), sfvfsRoot.resolve("inner2"));
+            
+            randomlyRemoveFiles(sfvfsRoot.resolve("inner"), Double.MAX_VALUE, Double.MAX_VALUE);
+
+            Files.delete(sfvfsRoot.resolve("inner"));
+
+            ((SFVFSFileSystem) sfvfsRoot.getFileSystem()).compact();
+
+            checkData(localfsPath, sfvfsRoot.resolve("inner2"), false);
+
+            sfvfsRoot.getFileSystem().close();
+
+            System.out.println("len " + dataFile.length());
+            System.out.println("time " + (System.currentTimeMillis() - l));
+            System.out.println();
+
+            //noinspection ResultOfMethodCallIgnored
+            dataFile.delete();
+        }
+    }
+
     private void uploadData(final Path localfsRootPath, final Path sfvfsRootPath) throws IOException {
         Files.createDirectory(sfvfsRootPath);
 
@@ -86,7 +128,7 @@ class SFVFSFilesystemRealDataTest {
 
                         if (Files.isDirectory(localPath)) {
                             Files.createDirectory(sfvfsPath);
-                            System.out.println("created dir " + relativeLocalPath);
+                            log.info("created dir {}", relativeLocalPath);
                         } else {
                             try (final InputStream is = Files.newInputStream(localPath)) {
                                 try (final OutputStream os = Files.newOutputStream(sfvfsPath, StandardOpenOption.CREATE_NEW)) {
@@ -94,7 +136,7 @@ class SFVFSFilesystemRealDataTest {
                                 }
                             }
 
-                            System.out.println("created file " + relativeLocalPath);
+                            log.info("created file {}", relativeLocalPath);
                         }
                     } catch (final IOException e) {
                         throw new RuntimeException(e);
@@ -116,7 +158,7 @@ class SFVFSFilesystemRealDataTest {
 
                         //noinspection StatementWithEmptyBody
                         if (localPathAttributes.isDirectory() && sfvfsPathAttributes.isDirectory()) {
-                            System.out.println("directory exists " + relativeLocalPath);
+                            log.info("directory exists {}", relativeLocalPath);
                         } else if (!localPathAttributes.isDirectory() && !sfvfsPathAttributes.isDirectory()) {
                             try (final InputStream localIs = Files.newInputStream(localPath)) {
                                 try (final InputStream sfvfsIs = Files.newInputStream(sfvfsPath)) {
@@ -124,7 +166,7 @@ class SFVFSFilesystemRealDataTest {
                                 }
                             }
 
-                            System.out.println("file same content " + relativeLocalPath);
+                            log.info("file same content {}", relativeLocalPath);
                         } else {
                             fail("different entity type " + relativeLocalPath);
                         }
@@ -133,7 +175,7 @@ class SFVFSFilesystemRealDataTest {
                         if (!skipNotExists) {
                             throw new RuntimeException(nfe);
                         } else {
-                            System.out.println("file not exists, skipping " + relativeLocalPath);
+                            log.info("file not exists, skipping {}",  relativeLocalPath);
                         }
                     } catch (final IOException e) {
                         throw new RuntimeException(e);
@@ -155,13 +197,13 @@ class SFVFSFilesystemRealDataTest {
 
                         if (attributes.isDirectory()) {
                             if (rValue <= removeDirProbability) {
-                                System.out.println("remove dir " + path);
+                                log.info("remove dir {}", path);
                                 doDelete(path, true);
                                 doDelete(path, false);
                             }
                         } else {
                             if (rValue <= removeFileProbability) {
-                                System.out.println("remove file " + path);
+                                log.info("remove file {}", path);
                                 Files.delete(path);
                             }
                         }
