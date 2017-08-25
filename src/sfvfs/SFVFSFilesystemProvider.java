@@ -144,7 +144,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
             return writeChannel(sfvfsPath, sfvfsFileSystem, options);
         }
 
-        return readChannel(sfvfsPath, sfvfsFileSystem, options);
+        return readChannel(sfvfsPath, sfvfsFileSystem);
     }
 
     @Override
@@ -592,7 +592,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
         return currentEntity;
     }
 
-    private SeekableByteChannel readChannel(final SFVFSPath sfvfsPath, final SFVFSFileSystem sfvfsFileSystem, final Set<? extends OpenOption> options) throws IOException {
+    private SeekableByteChannel readChannel(final SFVFSPath sfvfsPath, final SFVFSFileSystem sfvfsFileSystem) throws IOException {
         final DirectoryEntity entity = findEntity(sfvfsFileSystem, sfvfsPath.getFSPath());
 
         if (entity == null) {

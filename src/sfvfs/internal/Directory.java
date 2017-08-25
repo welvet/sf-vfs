@@ -74,13 +74,7 @@ public class Directory {
     public Iterator<DirectoryEntity> listEntities() throws IOException {
         return getAllEntityLists()
                 .stream()
-                .flatMap(entityList -> {
-                    try {
-                        return iteratorToStream(entityList.listEntities());
-                    } catch (IOException io) {
-                        throw new RuntimeException(io);
-                    }
-                })
+                .flatMap(entityList -> iteratorToStream(entityList.listEntities()))
                 .iterator();
     }
 
@@ -304,7 +298,7 @@ public class Directory {
             this.entityListRootBlock = dataBlocks.getBlock(entityListBlockAddress);
         }
 
-        Iterator<DirectoryEntity> listEntities() throws IOException {
+        Iterator<DirectoryEntity> listEntities() {
 
             return new Iterator<DirectoryEntity>() {
                 private Node next;
@@ -518,13 +512,9 @@ public class Directory {
             final StringBuilder sb = new StringBuilder();
 
             sb.append("Entities [address=").append(entityListRootBlock.getAddress()).append("] \n");
-            try {
-                final Iterator<DirectoryEntity> entityIterator = listEntities();
-                while (entityIterator.hasNext()) {
-                    sb.append("  ").append(entityIterator.next()).append("\n");
-                }
-            } catch (final IOException io) {
-                sb.append("can't list entities").append(io.toString());
+            final Iterator<DirectoryEntity> entityIterator = listEntities();
+            while (entityIterator.hasNext()) {
+                sb.append("  ").append(entityIterator.next()).append("\n");
             }
 
             return sb.toString();

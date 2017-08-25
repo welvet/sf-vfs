@@ -25,6 +25,7 @@ import static sfvfs.utils.Preconditions.checkState;
 /**
  * @author alexey.kutuzov
  */
+@SuppressWarnings("SameParameterValue")
 public class SFVFSFileSystem extends FileSystem {
 
     private final SFVFSFilesystemProvider provider;

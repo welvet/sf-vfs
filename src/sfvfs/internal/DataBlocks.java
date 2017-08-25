@@ -218,7 +218,7 @@ public class DataBlocks implements AutoCloseable {
         }
     }
 
-    public int getTotalBlocks() throws IOException {
+    public int getTotalBlocks() {
         return allocatedGroups * blocksInGroup;
     }
 
@@ -396,19 +396,19 @@ public class DataBlocks implements AutoCloseable {
             }
         }
 
-        boolean hasFreeBlocks() throws IOException {
+        boolean hasFreeBlocks() {
             initFreeBlocksCounter();
 
             return freeBlocks > 0;
         }
 
-        boolean isEmpty() throws IOException {
+        boolean isEmpty() {
             initFreeBlocksCounter();
 
             return freeBlocks == blocksInGroup - FIRST_AVAILABLE_BLOCK;
         }
 
-        int getFreeBlocks() throws IOException {
+        int getFreeBlocks() {
             initFreeBlocksCounter();
 
             return freeBlocks;
@@ -498,7 +498,7 @@ public class DataBlocks implements AutoCloseable {
             dataFile.write(currentBlockFlags.value());
         }
 
-        private void initFreeBlocksCounter() throws IOException {
+        private void initFreeBlocksCounter() {
             if (freeBlocks == FREE_BLOCKS_NOT_INITIALIZED) {
                 int free = 0;
 
