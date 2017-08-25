@@ -22,8 +22,8 @@ import static sfvfs.utils.Streams.iteratorToStream;
  */
 public class Directory {
 
-    public static final String NAME_REGEXP = "[A-Za-z0-9\\-_.]+";
-    public static final String NAME_REGEXP_AND_SLASH = "[A-Za-z0-9\\-_./]+";
+    public static final String NAME_REGEXP = "[A-Za-z0-9${}\\-_.]+";
+    public static final String NAME_REGEXP_AND_SLASH = "[A-Za-z0-9${}\\-_./]+";
 
     private final static int NULL_POINTER = 0;
     private final static int PTRLEN = 4;

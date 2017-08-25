@@ -53,13 +53,13 @@ import static sfvfs.utils.Preconditions.checkState;
  */
 public class SFVFSFilesystemProvider extends FileSystemProvider {
 
-    private static final int BLOCK_SIZE = 1024;
-    private static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 4;
-    private static final String MODE = "rw";
-    private static final int DIR_MAX_NAME_LEN = 255;
-    private static final int DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED = 40;
-    private static final int MAX_BLOCKS = 10 * 1024 * 1024;
-    private static final int FREE_LOGICAL_ADDRESS_CACHE_SIZE = 1000;
+    static final int BLOCK_SIZE = 1024;
+    static final int BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE = 4;
+    static final String MODE = "rw";
+    static final int DIR_MAX_NAME_LEN = 255;
+    static final int DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED = 40;
+    static final int MAX_BLOCKS = 1024 * 1024;
+    static final int FREE_LOGICAL_ADDRESS_CACHE_SIZE = 1000;
 
     private static final int ROOT_DATA_BLOCK_ADDRESS = 1;
 

@@ -6,6 +6,7 @@ import java.util.Random;
  * @author alexey.kutuzov
  */
 public class StringUtils {
+
     public static String generateText(final Random r, final int len) {
         final StringBuilder sb = new StringBuilder(len);
 

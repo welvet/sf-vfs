@@ -178,6 +178,7 @@ public class SFVFSFileSystem extends FileSystem {
         checkThread();
 
         final DataBlocks.Block dirBlock = dataBlocks.allocateBlock();
+        dirBlock.clear();
         final Directory newDir = new Directory(dataBlocks, dirBlock.getAddress(), dirMaxNameLen, directoryMinSizeToBecomeIndexed);
         newDir.create();
         return newDir;
@@ -193,13 +194,21 @@ public class SFVFSFileSystem extends FileSystem {
         checkThread();
 
         final DataBlocks.Block dirBlock = dataBlocks.allocateBlock();
+        dirBlock.clear();
         final Inode inode = new Inode(dataBlocks, dirBlock.getAddress());
         inode.clear();
         return inode;
     }
 
+    int getFreeBlocks() throws IOException {
+        return dataBlocks.getFreeBlocks();
+    }
+
+    void compact() throws IOException {
+        dataBlocks.compact();
+    }
+
     private void checkThread() {
         checkState(Thread.currentThread().getId() == workingThreadId, "fs direct access by different than it's creator thread is prohibited, use thread with id %s", workingThreadId);
     }
-
 }
