@@ -19,10 +19,10 @@ import static sfvfs.utils.Preconditions.*;
  */
 public class DataBlocks implements AutoCloseable {
 
-    public static final int MAX_BLOCKS_MAX_VALUE = 10 * 1024 * 1024;
-
+    private static final int MAX_BLOCKS_MAX_VALUE = 4 * 1024 * 1024;
     private static final int FREE_BLOCKS_NOT_INITIALIZED = -1;
     private static final int FIRST_AVAILABLE_BLOCK = 1;
+
     private static final int NULL_POINTER = 0;
     private static final int PTRLEN = 4;
 
@@ -39,6 +39,7 @@ public class DataBlocks implements AutoCloseable {
 
     private final Map<Integer, BlockGroup> blockGroupsWithFreeBlocks = new HashMap<>();
     private final Queue<Integer> freeLogicalAddressCache;
+    private final int[] logicalToPhysicalAddressCache;
     private int addressMappingVersion;
     private int allocatedGroups;
 
@@ -70,6 +71,7 @@ public class DataBlocks implements AutoCloseable {
         this.maxBlocks = maxBlocks;
         this.freeLogicalAddressCacheSize = freeLogicalAddressCacheSize;
 
+        this.logicalToPhysicalAddressCache = new int[maxBlocks];
         this.freeLogicalAddressCache = new ArrayDeque<>(freeLogicalAddressCacheSize);
 
         log.info("blocks created on {} blocks size {} mode {}", file.getAbsoluteFile(), blockSize, mode);
@@ -82,7 +84,7 @@ public class DataBlocks implements AutoCloseable {
                 dataFile.write(empty);
             }
             checkState(dataFile.length() == dataFileOffset, "wrong file size");
-            log.debug("logical address mapping region allocated 0 {}", logicalAddressMappingRegionLen);
+            log.debug("logical address mapping region allocated 0 - {}", logicalAddressMappingRegionLen);
         }
 
         final long blocksDataLen = this.dataFile.length() - dataFileOffset;
@@ -126,7 +128,6 @@ public class DataBlocks implements AutoCloseable {
                 blockGroupsWithFreeBlocks.remove(blockGroup.id);
             }
         }
-
     }
 
     void deallocateBlock(final int logicalBlockAddress) throws IOException {
@@ -155,8 +156,8 @@ public class DataBlocks implements AutoCloseable {
             log.info("compact start blocks={} free={} fsize={}", getTotalBlocks(), getFreeBlocks(), dataFile.length());
         }
 
-        int startGroup = 0;
-        int endGroup = allocatedGroups - 1;
+        int startGroup = -1;
+        int endGroup = allocatedGroups;
 
         BlockGroup sourceBlockGroup = null;
         BlockGroup targetBlockGroup = null;
@@ -165,21 +166,21 @@ public class DataBlocks implements AutoCloseable {
 
         while (startGroup < endGroup) {
             while (targetBlockGroup == null && startGroup < endGroup) {
-                targetBlockGroup = new BlockGroup(startGroup++);
+                targetBlockGroup = new BlockGroup(++startGroup);
                 if (!targetBlockGroup.hasFreeBlocks()) {
                     targetBlockGroup = null;
                 }
             }
 
             while (sourceBlockGroup == null && endGroup > startGroup) {
-                sourceBlockGroup = new BlockGroup(endGroup--);
+                sourceBlockGroup = new BlockGroup(--endGroup);
                 if (sourceBlockGroup.isEmpty()) {
                     sourceBlockGroup.deallocateGroup();
                     sourceBlockGroup = null;
                 }
             }
 
-            if (targetBlockGroup != null && sourceBlockGroup != null) {
+            if (startGroup < endGroup && targetBlockGroup != null && sourceBlockGroup != null) {
                 while (targetBlockGroup.hasFreeBlocks() && !sourceBlockGroup.isEmpty()) {
                     final int sourceBlockIdInGroup = sourceBlockGroup.nextAllocatedBlockIdFromCache();
                     final int sourceBlockPhysicalAddress = sourceBlockGroup.id * blocksInGroup + sourceBlockIdInGroup;
@@ -280,6 +281,8 @@ public class DataBlocks implements AutoCloseable {
         dataFile.seek(logicalAddress * PTRLEN);
         dataFile.writeInt(physicalAddress);
 
+        logicalToPhysicalAddressCache[logicalAddress] = physicalAddress;
+
         log.debug("address mapping created {} -> {}", logicalAddress, physicalAddress);
 
         return logicalAddress;
@@ -288,10 +291,18 @@ public class DataBlocks implements AutoCloseable {
     private int resolvePhysicalAddress(final int logicalAddress) throws IOException {
         checkArgument(logicalAddress > 0, "logicalAddress must be more than 0");
 
+        final int cachedPhysicalAddress = logicalToPhysicalAddressCache[logicalAddress];
+
+        if (cachedPhysicalAddress != NULL_POINTER) {
+            return cachedPhysicalAddress;
+        }
+
         dataFile.seek(logicalAddress * PTRLEN);
         final int associatedPhysicalAddress = dataFile.readInt();
 
         checkState(associatedPhysicalAddress != NULL_POINTER, "address %s not allocated", logicalAddress);
+
+        logicalToPhysicalAddressCache[logicalAddress] = associatedPhysicalAddress;
 
         return associatedPhysicalAddress;
     }
@@ -310,6 +321,8 @@ public class DataBlocks implements AutoCloseable {
 
         dataFile.seek(logicalAddress * PTRLEN);
         dataFile.writeInt(newPhysicalAddress);
+
+        logicalToPhysicalAddressCache[logicalAddress] = newPhysicalAddress;
 
         log.debug("address mapping updated {} -> {} (was={})", logicalAddress, newPhysicalAddress, oldPhysicalAddress);
     }
@@ -334,6 +347,8 @@ public class DataBlocks implements AutoCloseable {
 
         dataFile.seek(logicalAddress * PTRLEN);
         dataFile.writeInt(NULL_POINTER);
+
+        logicalToPhysicalAddressCache[logicalAddress] = NULL_POINTER;
 
         log.debug("address mapping released {}", logicalAddress);
 
@@ -549,8 +564,9 @@ public class DataBlocks implements AutoCloseable {
             dataFile.writeInt(value);
         }
 
-        void clear() throws IOException {
+        public void clear() throws IOException {
             checkAddressMappingVersion();
+
             write(new byte[blockSize]);
         }
 
