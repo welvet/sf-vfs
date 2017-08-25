@@ -40,7 +40,7 @@ Write operation takes last Inode from root Inode and append data to last data bl
 
 When clear or delete Inode releases it's block sequentially.
 
-### Directory ### 
+### Directory ###
 
 Every directory in SFVFS has it's own Directory block. Every directory entity has a name, flags and pointer to it's root Inode/Directory block.
 
