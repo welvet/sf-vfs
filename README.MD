@@ -66,7 +66,7 @@ Test case (warmup and test stage):
 - copy them in container
 - remove origin dir in container
 - compact container
-- find copied files one by one and verify it's content against source
+- find copied files one by one and verify its content against source
 - close container
 
 All test are made in "rw" mode. Max blocks 1024 * 1024, indexed dir threshold 40. No logging.
@@ -90,13 +90,13 @@ Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 ### Results ###
 
 SFVFS itself does not depend on memory, it's working on very small  (15MB) and big (500MB) heap sizes with same performance. 
-When SFVFS runs on "rw" mode it doesn't affect disk ether (no fsync called until closing container).
+When SFVFS runs on "rw" mode it doesn't affect disk either (no fsync called until closing container).
 But it's need to remember that OS caches RAF pages and if there is no ram left for it OS will read/write to disk more often.
 The most impact goes to CPU. Besides IOUtils there is Input and Output streams in Hot Methods. Which is expected due to lack of read(byte[]) and write(byte[]) methods optimal implementation.
 
 ## Possible future improvements ##
  
-- To increase overall performance best think to do would be implementing read(byte[]) and write(byte[]).
+- To increase overall performance best thing to do would be implementing read(byte[]) and write(byte[]).
 - To increase durability the best thing would be to create a journal of applied data (which would be written in append only mode and fsync flushes for every transaction).
 - Another durability improvement would be creating data repair process.
 - To increase performance in concurrent environment is possible to implement read many, write one locking with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
