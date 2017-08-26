@@ -12,15 +12,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayDeque;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -29,8 +29,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  * @author alexey.kutuzov
  */
 class SFVFSFilesystemRealDataTest {
-    
-    private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemRealDataTest.class); 
+
+    private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemRealDataTest.class);
 
     private Random r;
 
@@ -82,7 +82,7 @@ class SFVFSFilesystemRealDataTest {
     @Test
     @Disabled
     void pTest() throws IOException {
-        System.out.println("mem: " + Runtime.getRuntime().maxMemory() );
+        System.out.println("mem: " + Runtime.getRuntime().maxMemory());
         System.out.println();
 
         for (int i = 0; i < 3; i++) {
@@ -96,7 +96,7 @@ class SFVFSFilesystemRealDataTest {
             uploadData(localfsPath, sfvfsRoot.resolve("inner"));
 
             Files.copy(sfvfsRoot.resolve("inner"), sfvfsRoot.resolve("inner2"));
-            
+
             randomlyRemoveFiles(sfvfsRoot.resolve("inner"), Double.MAX_VALUE, Double.MAX_VALUE);
 
             Files.delete(sfvfsRoot.resolve("inner"));
@@ -175,7 +175,7 @@ class SFVFSFilesystemRealDataTest {
                         if (!skipNotExists) {
                             throw new RuntimeException(nfe);
                         } else {
-                            log.info("file not exists, skipping {}",  relativeLocalPath);
+                            log.info("file not exists, skipping {}", relativeLocalPath);
                         }
                     } catch (final IOException e) {
                         throw new RuntimeException(e);
@@ -198,8 +198,7 @@ class SFVFSFilesystemRealDataTest {
                         if (attributes.isDirectory()) {
                             if (rValue <= removeDirProbability) {
                                 log.info("remove dir {}", path);
-                                doDelete(path, true);
-                                doDelete(path, false);
+                                doDelete(path);
                             }
                         } else {
                             if (rValue <= removeFileProbability) {
@@ -213,25 +212,20 @@ class SFVFSFilesystemRealDataTest {
                 });
     }
 
-    private void doDelete(final Path path, final boolean deleteFiles) throws IOException {
-        Files.walk(path)
-                .collect(Collectors.toCollection(ArrayDeque::new)).descendingIterator() //reverse order
-                .forEachRemaining(innerPath -> {
-                    try {
-                        final BasicFileAttributes innerAttributes = Files.readAttributes(path, BasicFileAttributes.class);
-                        if (deleteFiles) {
-                            if (innerAttributes.isRegularFile()) {
-                                Files.delete(innerPath);
-                            }
-                        } else {
-                            if (innerAttributes.isDirectory()) {
-                                Files.delete(innerPath);
-                            }
-                        }
-                    } catch (final IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
+    private void doDelete(final Path path) throws IOException {
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(final Path dir, final IOException exc) throws IOException {
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     private File createDataFile() throws IOException {
