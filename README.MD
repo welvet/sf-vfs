@@ -67,6 +67,7 @@ High level directory API exposed through Java FS API (with limitation). SFVFS Fi
 Test directory contains small java sources files with couple of large archives: 4472 files, 85M in total.
 
 Test case (warmup and test stage): 
+
 - load all files into container (respecting dir structure) 
 - copy them in container
 - remove origin dir in container
@@ -74,7 +75,7 @@ Test case (warmup and test stage):
 - find copied files one by one and verify its content against source
 - close container
 
-All test are made in "rw" mode. Max blocks 1024 * 1024, indexed dir threshold 40. No logging.
+All test are made in "rw" mode. Block size 1024, max blocks 1024 * 1024, indexed dir threshold 40, no logging.
 
 Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 
