@@ -18,6 +18,16 @@ The is no corruption protection and recovery procedure, but SFVFS designed to le
 
 Move operation will take O(1) and copy O(blocks to copy).
 
+## Usage ##
+
+SFVFS uses standart java File System API (with limitations).
+
+`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
+
+More examples could be found in `SFVFSFilesystemRealDataTest.java`.
+
+TBD: configure container params via url
+
 ## Implementation ##
 
 ### Blocks ###
@@ -51,9 +61,6 @@ To list directory entities iterator goes through every existing Entity list. Ent
 ### java.nio.file.spi.FileSystemProvider ###
 
 High level directory API exposed through Java FS API (with limitation). SFVFS FileSystem implementation has link to data blocks and pointer to root directory (block address  = 1). The rest of implementation is trivial.
-
-Usage:
-`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
 
 ## Performance ##
 
@@ -94,12 +101,12 @@ The most impact goes to CPU. Besides IOUtils there is Input and Output streams i
 
 ## Possible future improvements ##
  
-- To increase overall performance best thing to do would be implementing read(byte[]) and write(byte[]).
+- To increase overall performance best thing to do would be implementing read(byte[]) and write(byte[]) optimal.
 - To increase durability the best thing would be to create a journal of applied data (which would be written in append only mode and fsync flushes for every transaction).
 - Another durability improvement would be creating data repair process.
-- To increase performance in concurrent environment is possible to implement read many, write one locking with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
-- Random access could be achieved by adding Inode indirect support.
-- Adding another layer into hash indexed directories would increase amount of files in dir significantly.
+- To increase performance in concurrent environment is possible to implement "read many, write one locking" with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
+- Random access could be achieved by adding indirect Inodes.
+- Adding another layer into hash indexed directories would increase amount of possible files in dir significantly.
 - Moving configuration settings from constants would be also great. 
 
 ## How to build ##
