@@ -87,7 +87,7 @@ Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 - rw block: 1024 -Xmx50m: time: ~19s filesize: 93M
 - rw block: 1024 -Xmx500m: time: ~21s filesize: 93M
 - rw block: 512: time: ~23s filesize: 88M
-- rw block: 512: time: ~13s filesize: 138M
+- rw block: 4096: time: ~13s filesize: 138M
 
 ### Profiled run ###
 
