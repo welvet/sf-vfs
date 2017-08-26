@@ -24,7 +24,7 @@ SFVFS uses standart java File System API (with limitations).
 
 `final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
 
-More examples could be found in `SFVFSFilesystemRealDataTest.java`.
+Examples could be found in `SFVFSFilesystemRealDataTest.java`.
 
 TBD: configure container params via url
 
