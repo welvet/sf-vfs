@@ -75,17 +75,19 @@ Test case (warmup and test stage):
 - find copied files one by one and verify its content against source
 - close container
 
-All test are made in "rw" mode. Block size 1024, max blocks 1024 * 1024, indexed dir threshold 40, no logging.
+All test are made in "rw" mode. Max blocks 1024 * 1024, indexed dir threshold 40, no logging.
 
 Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 
 ### Tests run ###
 
-- rw -Xmx10m: OOM
-- rw -Xmx15m: time: ~20s filesize: 93M
-- rw -Xmx30m: time: ~20s filesize: 93M
-- rw -Xmx50m: time: ~19s filesize: 93M
-- rw -Xmx500m: time: ~21s filesize: 93M
+- rw block: 1024 -Xmx10m: OOM
+- rw block: 1024 -Xmx15m: time: ~20s filesize: 93M
+- rw block: 1024 -Xmx30m: time: ~20s filesize: 93M
+- rw block: 1024 -Xmx50m: time: ~19s filesize: 93M
+- rw block: 1024 -Xmx500m: time: ~21s filesize: 93M
+- rw block: 512: time: ~23s filesize: 88M
+- rw block: 512: time: ~13s filesize: 138M
 
 ### Profiled run ###
 
