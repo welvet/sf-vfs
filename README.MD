@@ -1,7 +1,5 @@
 # SFVFS is single file virtual file system for Java #
 
-## Solution overview ##
-
 SFVFS supports files and directories. You can create, delete, copy or move any file or directory. Also you can read, write or append files data. SFVFS doesn't support multithreading, has no corruption protection, no file attributes, no random access of files data, no hard- sym- links. SFVFS focus on minimising RAM and disk usage. SFVFS has special compact operation to reduce container size to actual used size. SFVFS is similar to ext2 in a way it's designed.
  
 Block size and amount of maximum blocks has to be specified on SFVFS creation. There is no way to change it after. The amount of (4 * maximum blocks) will be allocated in file and in memory at creation time. Another (4 * maximum blocks) memory will be used during compaction process. 
@@ -19,6 +17,16 @@ There is a hard limit on max blocks size (up to 4 * 1024 * 1024), blocks pointer
 The is no corruption protection and recovery procedure, but SFVFS designed to leave data in least ambitious state if container or streams were not closed properly. No proper shutdown may leave unreachable blocks, wrong directory size, lost directory entities or lost not flushed files data (size of a block) and any other data left un flushed in RAF if SFVFS opened in "rw" mode.
 
 Move operation will take O(1) and copy O(blocks to copy).
+
+## Usage ##
+
+SFVFS uses standart java File System API (with limitations).
+
+`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
+
+Examples could be found in `SFVFSFilesystemRealDataTest.java`.
+
+TBD: configure container params via url
 
 ## Implementation ##
 
@@ -40,7 +48,7 @@ Write operation takes last Inode from root Inode and append data to last data bl
 
 When clear or delete Inode releases it's block sequentially.
 
-### Directory ### 
+### Directory ###
 
 Every directory in SFVFS has it's own Directory block. Every directory entity has a name, flags and pointer to it's root Inode/Directory block.
 
@@ -54,9 +62,6 @@ To list directory entities iterator goes through every existing Entity list. Ent
 
 High level directory API exposed through Java FS API (with limitation). SFVFS FileSystem implementation has link to data blocks and pointer to root directory (block address  = 1). The rest of implementation is trivial.
 
-Usage:
-`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
-
 ## Performance ##
 
 Test directory contains small java sources files with couple of large archives: 4472 files, 85M in total.
@@ -66,7 +71,7 @@ Test case (warmup and test stage):
 - copy them in container
 - remove origin dir in container
 - compact container
-- find copied files one by one and verify it's content against source
+- find copied files one by one and verify its content against source
 - close container
 
 All test are made in "rw" mode. Max blocks 1024 * 1024, indexed dir threshold 40. No logging.
@@ -90,18 +95,18 @@ Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 ### Results ###
 
 SFVFS itself does not depend on memory, it's working on very small  (15MB) and big (500MB) heap sizes with same performance. 
-When SFVFS runs on "rw" mode it doesn't affect disk ether (no fsync called until closing container).
+When SFVFS runs on "rw" mode it doesn't affect disk either (no fsync called until closing container).
 But it's need to remember that OS caches RAF pages and if there is no ram left for it OS will read/write to disk more often.
 The most impact goes to CPU. Besides IOUtils there is Input and Output streams in Hot Methods. Which is expected due to lack of read(byte[]) and write(byte[]) methods optimal implementation.
 
 ## Possible future improvements ##
  
-- To increase overall performance best think to do would be implementing read(byte[]) and write(byte[]).
+- To increase overall performance best thing to do would be implementing read(byte[]) and write(byte[]) optimal.
 - To increase durability the best thing would be to create a journal of applied data (which would be written in append only mode and fsync flushes for every transaction).
 - Another durability improvement would be creating data repair process.
-- To increase performance in concurrent environment is possible to implement read many, write one locking with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
-- Random access could be achieved by adding Inode indirect support.
-- Adding another layer into hash indexed directories would increase amount of files in dir significantly.
+- To increase performance in concurrent environment is possible to implement "read many, write one locking" with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
+- Random access could be achieved by adding indirect Inodes.
+- Adding another layer into hash indexed directories would increase amount of possible files in dir significantly.
 - Moving configuration settings from constants would be also great. 
 
 ## How to build ##
