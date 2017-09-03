@@ -14,13 +14,13 @@ Compaction process will take O(blocks) time and (4 * maximum blocks) memory to c
 
 There is a hard limit on max blocks size (up to 4 * 1024 * 1024), blocks pointers are signed int4 and pointers inside file are signed int8, besides that there is no limit on container size. Having 4 * 1024 * 1024 blocks with a 4kb block will give up to 4gb data size inside container and requires at least 17mb extra ram (without allocation cache and input/output stream buffers).
 
-The is no corruption protection and recovery procedure, but SFVFS designed to leave data in least ambitious state if container or streams were not closed properly. No proper shutdown may leave unreachable blocks, wrong directory size, lost directory entities or lost not flushed files data (size of a block) and any other data left un flushed in RAF if SFVFS opened in "rw" mode.
+The is no corruption protection and recovery procedure, but SFVFS designed to leave data in least ambitious state if container or streams were not closed properly. No proper shutdown may leave unreachable blocks, wrong directory size, lost directory entities or lost not flushed files data (size of a block) and any other data left un flushed in RAF in SFVFS opened in "rw" mode.
 
 Move operation will take O(1) and copy O(blocks to copy).
 
 ## Usage ##
 
-SFVFS uses standart java File System API (with limitations).
+SFVFS uses standart Java File System API (with limitations).
 
 `final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
 
@@ -93,7 +93,7 @@ Tests made on Mac Pro 2,2 GHz Intel Core i7 16GB SSD.
 
 - Heap usage: Avg 40Mb Max 71Mb
 - Total CPU: Avg 40% Max 65%
-- GS: Avg 1.2ms Max 7.6ms
+- GC: Avg 1.2ms Max 7.6ms
 
 ### Results ###
 

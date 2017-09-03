@@ -199,17 +199,17 @@ public class Inode {
 
     private class InodeInputStream extends InputStream {
 
-        private ByteBuffer currentInodeBlockData;
-        private int currentDataIndexBlockInInode = FIRST_DATA_BLOCK_IDX;
+        private ByteBuffer inodeBlockData;
+        private int dataBlockIndexInInode = FIRST_DATA_BLOCK_IDX;
 
-        private byte[] currentDataBlockData;
-        private int currentDataArrayIndex;
+        private byte[] dataBlockData;
+        private int dataBlockIndexIndex;
 
         private int sizeLeft;
 
         private InodeInputStream() throws IOException {
-            currentInodeBlockData = ByteBuffer.wrap(rootInodeBlock.read());
-            sizeLeft = currentInodeBlockData.getInt(SIZE_IDX * PTRLEN);
+            inodeBlockData = ByteBuffer.wrap(rootInodeBlock.read());
+            sizeLeft = inodeBlockData.getInt(SIZE_IDX * PTRLEN);
         }
 
         @Override
@@ -218,25 +218,25 @@ public class Inode {
                 return -1;
             }
 
-            if (currentDataBlockData == null) {
-                int nextAddress = currentInodeBlockData.getInt(currentDataIndexBlockInInode * PTRLEN);
+            if (dataBlockData == null) {
+                int nextAddress = inodeBlockData.getInt(dataBlockIndexInInode * PTRLEN);
 
-                if (currentDataIndexBlockInInode == nextInodeBlockIndex) {
-                    currentInodeBlockData = ByteBuffer.wrap(dataBlocks.getBlock(nextAddress).read());
-                    currentDataIndexBlockInInode = FIRST_DATA_BLOCK_IDX;
+                if (dataBlockIndexInInode == nextInodeBlockIndex) {
+                    inodeBlockData = ByteBuffer.wrap(dataBlocks.getBlock(nextAddress).read());
+                    dataBlockIndexInInode = FIRST_DATA_BLOCK_IDX;
                     log.debug("IS inode {} inode block open {}", rootInodeBlock.getAddress(), nextAddress);
-                    nextAddress = currentInodeBlockData.getInt(currentDataIndexBlockInInode * PTRLEN);
+                    nextAddress = inodeBlockData.getInt(dataBlockIndexInInode * PTRLEN);
                 }
-                currentDataIndexBlockInInode++;
+                dataBlockIndexInInode++;
 
-                currentDataArrayIndex = 0;
-                currentDataBlockData = dataBlocks.getBlock(nextAddress).read();
+                dataBlockIndexIndex = 0;
+                dataBlockData = dataBlocks.getBlock(nextAddress).read();
                 log.debug("IS inode {} data block open {}", rootInodeBlock.getAddress(), nextAddress);
             }
 
-            final byte result = currentDataBlockData[currentDataArrayIndex++];
-            if (currentDataArrayIndex == currentDataBlockData.length) {
-                currentDataBlockData = null;
+            final byte result = dataBlockData[dataBlockIndexIndex++];
+            if (dataBlockIndexIndex == dataBlockData.length) {
+                dataBlockData = null;
             }
 
             return result & 0xFF;

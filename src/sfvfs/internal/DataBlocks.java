@@ -61,6 +61,7 @@ public class DataBlocks implements AutoCloseable {
         checkArgument(maxBlocks <= MAX_BLOCKS_MAX_VALUE, "max blocks can't be more than %s", MAX_BLOCKS_MAX_VALUE);
         checkArgument(maxBlocks > 0, "max blocks size must be more than 0");
         checkArgument(maxBlocks % blockSize == 0, "max blocks must be divisible by block size");
+        checkArgument(blockGroupsWithFreeBlocksCacheSize > 0, "free blocks group cache must be more than 0");
 
         this.dataFile = new RandomAccessFile(file, mode);
 
