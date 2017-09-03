@@ -18,15 +18,42 @@ The is no corruption protection and recovery procedure, but SFVFS designed to le
 
 Move operation will take O(1) and copy O(blocks to copy).
 
+SFVFS does not depend on any library except slf4j for logging.
+
 ## Usage ##
 
-SFVFS uses standart Java File System API (with limitations).
+SFVFS uses standard Java File System API (with limitations).
 
-`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat:/"));`
+`final Path sfvfsRoot = Paths.get(URI.create("sfvfs:/path/to/container/file.dat?blockSize=1024&dirMaxNameLen=100:/"));`
 
-Examples could be found in `SFVFSFilesystemRealDataTest.java`.
+### Configuration ###
 
-TBD: configure container params via url
+Configuration parameters can be passed in url.    
+
+- `blockSize` - data block size (must be power of 2)
+- `blockGroupsWithFreeBlocksCacheSize` - amount of groups allocation info blocks cached in memory 
+- `mode` - RAF mode (`rw`, `rwd` etc)
+- `maxBlocks` - total amount of blocks 
+- `freeLogicalAddressCacheSize` - amount of free logical addresses to be cached  
+- `dirMaxNameLen` - max directory entity length
+- `directoryMinSizeToBecomeIndexed` - amount of entities in directory to be indexed
+
+If param does not exist in url default value will be used (check `SFVFSFilesystemProvider` for defaults).
+
+### Examples ###
+
+- `Files.exists(path)` - check entity exists
+- `Files.isDirectory(path)` - check entity is a directory
+- `Files.createDirectory(path)` - create dir recursively 
+- `Files.delete(path)` - delete inode or empty directory
+- `Files.newInputStream(path)` - get inode input stream
+- `Files.newOutputStream(path, StandardOpenOption.CREATE)` - create or replace inode and get it's output stream
+- `Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)` - create new inode and get it's output stream
+- `Files.newOutputStream(path, StandardOpenOption.APPEND)` - get inode append output stream
+- `Files.copy(pathA, pathB);` - copy recursively
+- `Files.move(pathA, pathB);` - move 
+
+Check `SFVFSFilesystemTest` and Java Files API for more details.
 
 ## Implementation ##
 
@@ -104,13 +131,14 @@ The most impact goes to CPU. Besides IOUtils there is Input and Output streams i
 
 ## Possible future improvements ##
  
-- To increase overall performance best thing to do would be implementing read(byte[]) and write(byte[]) optimal.
+- To increase overall performance best thing to do would be writing read(byte[]) and write(byte[]) optimal implementation.
 - To increase durability the best thing would be to create a journal of applied data (which would be written in append only mode and fsync flushes for every transaction).
 - Another durability improvement would be creating data repair process.
 - To increase performance in concurrent environment is possible to implement "read many, write one locking" with relative small changes. Also some processes (block allocation preparation, compact) could be moved to separate thread.
 - Random access could be achieved by adding indirect Inodes.
 - Adding another layer into hash indexed directories would increase amount of possible files in dir significantly.
-- Moving configuration settings from constants would be also great. 
+- Removing logical to physical address mapping from it's static position and make it grows flexible would decrease container file minimum size and also increase possible data size to int4 pointer limit.
+- Inodes and directory blocks can have different size and allocation process to decrease overall container size (Inodes groups can be implemented).
 
 ## How to build ##
 
