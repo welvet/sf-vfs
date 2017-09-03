@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 
+import static sfvfs.SFVFSFilesystemProvider.ROOT_DATA_BLOCK_ADDRESS;
 import static sfvfs.utils.Preconditions.*;
 
 /**
@@ -181,6 +182,13 @@ public class SFVFSFileSystem extends FileSystem {
         final Directory newDir = new Directory(dataBlocks, dirBlock.getAddress(), dirMaxNameLen, directoryMinSizeToBecomeIndexed);
         newDir.create();
         return newDir;
+    }
+
+    void createRootDirectory() throws IOException {
+        final DataBlocks.Block rootDirBlock = dataBlocks.allocateBlock();
+        checkState(rootDirBlock.getAddress() == ROOT_DATA_BLOCK_ADDRESS, "root block must have address %s", ROOT_DATA_BLOCK_ADDRESS);
+        final Directory rootDirectory = new Directory(dataBlocks, rootDirBlock.getAddress(), dirMaxNameLen, directoryMinSizeToBecomeIndexed);
+        rootDirectory.create();
     }
 
     Inode getInode(final int address) throws IOException {

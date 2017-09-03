@@ -114,7 +114,7 @@ public class Directory {
         checkNotNull(name, "name");
         checkNotNull(flags, "flags");
         checkArgument(address > 0, "address must be more than 0: %s", address);
-        checkArgument(name.length() <= maxNameLen, "name len must be les than %s: %s", maxNameLen, name);
+        checkArgument(name.length() <= maxNameLen, "name len must be less than %s: %s", maxNameLen, name);
         checkArgument(name.matches(NAME_REGEXP), "name doesn't match %s %s", NAME_REGEXP, name);
 
         checkState(find(name) == null, "element %s already exists", name);

@@ -369,4 +369,44 @@ class SFVFSFilesystemTest {
         assertEquals("abc", Files.readAllLines(reopenedRoot.resolve("dir/file.txt")).get(0));
     }
 
+    @Test
+    void passParamInUrl() throws IOException {
+        final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=5:/");
+        final Path root = Paths.get(uri);
+
+        try {
+            Files.createDirectory(root.resolve("1234567890"));
+            fail("dir name must be too long");
+        } catch (final Exception ex) {
+            assertTrue(ex.getMessage().contains("name len must be less than 5"));
+        }
+
+        Files.createDirectory(root.resolve("1234"));
+    }
+
+    @Test
+    void passWrongParamInUrl() {
+        try {
+            final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=0:/");
+            final Path root = Paths.get(uri);
+
+            fail("dir max name check must fail");
+        } catch (final IllegalArgumentException ex) {
+            assertTrue(ex.getMessage().contains("max len must be more than 0"));
+        }
+    }
+
+    @Test
+    void passMultipleWrongParamsInUrl() {
+        try {
+            final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=10&blockSize=12:/");
+            final Path root = Paths.get(uri);
+
+            fail("block size must fail");
+        } catch (final IllegalArgumentException ex) {
+            assertTrue(ex.getMessage().contains("block size must be power of 2"));
+        }
+    }
+
+
 }

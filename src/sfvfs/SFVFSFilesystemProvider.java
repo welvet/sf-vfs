@@ -44,9 +44,9 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.Stack;
+import java.util.function.Function;
 
-import static sfvfs.utils.Preconditions.checkArgument;
-import static sfvfs.utils.Preconditions.checkState;
+import static sfvfs.utils.Preconditions.*;
 
 /**
  * @author alexey.kutuzov
@@ -62,7 +62,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
     static final int MAX_BLOCKS = 1024 * 1024;
     static final int FREE_LOGICAL_ADDRESS_CACHE_SIZE = 1000;
 
-    private static final int ROOT_DATA_BLOCK_ADDRESS = 1;
+    static final int ROOT_DATA_BLOCK_ADDRESS = 1;
 
     private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemProvider.class);
 
@@ -76,8 +76,10 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
     @Override
     public FileSystem newFileSystem(final URI uri, final Map<String, ?> env) throws IOException {
         synchronized (fileSystems) {
-            final String dataFilePath = extractDataFile(uri);
+            final String sfvfsUri = extractSFVFSUri(uri);
+            final String dataFilePath = extractDataFile(sfvfsUri);
             checkState(!fileSystems.containsKey(dataFilePath), "fs already exists %s", uri);
+            final Map<String, String> paramsMap = extractSFVFSParams(sfvfsUri);
 
             final File dataFile = new File(dataFilePath);
             final boolean createNew = !dataFile.exists();
@@ -86,15 +88,26 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
                 checkState(dataFile.createNewFile(), "can't create file %s", dataFile.getAbsolutePath());
             }
 
-            final DataBlocks dataBlocks = new DataBlocks(dataFile, BLOCK_SIZE, BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE, MODE, MAX_BLOCKS, FREE_LOGICAL_ADDRESS_CACHE_SIZE);
+            final DataBlocks dataBlocks = new DataBlocks(
+                    dataFile,
+                    getIntParam(paramsMap.get("blockSize"), BLOCK_SIZE),
+                    getIntParam(paramsMap.get("blockGroupsWithFreeBlocksCacheSize"), BLOCK_GROUPS_WITH_FREE_BLOCKS_CACHE_SIZE),
+                    getParam(paramsMap.get("mode"), s -> s, MODE),
+                    getIntParam(paramsMap.get("maxBlocks"), MAX_BLOCKS),
+                    getIntParam(paramsMap.get("freeLogicalAddressCacheSize"), FREE_LOGICAL_ADDRESS_CACHE_SIZE)
+            );
+            final SFVFSFileSystem fileSystem = new SFVFSFileSystem(
+                    this,
+                    dataBlocks,
+                    ROOT_DATA_BLOCK_ADDRESS,
+                    getIntParam(paramsMap.get("dirMaxNameLen"), DIR_MAX_NAME_LEN),
+                    getIntParam(paramsMap.get("directoryMinSizeToBecomeIndexed"), DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED)
+            );
+
             if (createNew) {
-                final DataBlocks.Block rootDirBlock = dataBlocks.allocateBlock();
-                checkState(rootDirBlock.getAddress() == ROOT_DATA_BLOCK_ADDRESS, "root block must have address 1");
-                final Directory rootDirectory = new Directory(dataBlocks, rootDirBlock.getAddress(), DIR_MAX_NAME_LEN, DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED);
-                rootDirectory.create();
+                fileSystem.createRootDirectory();
             }
 
-            final SFVFSFileSystem fileSystem = new SFVFSFileSystem(this, dataBlocks, ROOT_DATA_BLOCK_ADDRESS, DIR_MAX_NAME_LEN, DIRECTORY_MIN_SIZE_TO_BECOME_INDEXED);
             fileSystems.put(dataFilePath, fileSystem);
 
             return fileSystem;
@@ -104,7 +117,7 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
     @Override
     public FileSystem getFileSystem(final URI uri) {
         synchronized (fileSystems) {
-            final String dataFilePath = extractDataFile(uri);
+            final String dataFilePath = extractDataFile(extractSFVFSUri(uri));
             final FileSystem fileSystem = fileSystems.get(dataFilePath);
             if (fileSystem != null) {
                 return fileSystem;
@@ -391,11 +404,56 @@ public class SFVFSFilesystemProvider extends FileSystemProvider {
         throw new UnsupportedOperationException("attributes not supported");
     }
 
-    private String extractDataFile(final URI uri) {
+    private String extractSFVFSUri(final URI uri) {
         final String schemeSpecificPart = uri.getSchemeSpecificPart();
         final int delimIdx = schemeSpecificPart.indexOf(':');
         checkArgument(delimIdx > 0, "not found ':' delimiter");
-        return schemeSpecificPart.substring(0, delimIdx).toLowerCase();
+
+        return schemeSpecificPart.substring(0, delimIdx);
+    }
+
+    private String extractDataFile(final String sfvfsUri) {
+        checkNotNull(sfvfsUri, "sfvfsUri");
+
+        final int paramsDelim = sfvfsUri.indexOf("?");
+        if (paramsDelim > 0) {
+            return sfvfsUri.substring(0, paramsDelim);
+        }
+
+        return sfvfsUri;
+    }
+
+    private Map<String, String> extractSFVFSParams(final String sfvfsUri) {
+        checkNotNull(sfvfsUri, "sfvfsUri");
+
+        final int paramsDelim = sfvfsUri.indexOf("?");
+        if (paramsDelim == -1) {
+            return Collections.emptyMap();
+        }
+
+        final String paramsRaw = sfvfsUri.substring(paramsDelim + 1);
+        final String[] paramsRawArray = paramsRaw.split("&");
+
+        final Map<String, String> params = new HashMap<>();
+        for (final String paramRaw : paramsRawArray) {
+            final String[] paramParts = paramRaw.split("=");
+            checkArgument(paramParts.length == 2, "unexpected param %s", paramRaw);
+            params.put(paramParts[0], paramParts[1]);
+        }
+
+        return params;
+    }
+
+    private int getIntParam(final String rawValue, final int defaultValue) {
+        return getParam(rawValue, Integer::parseInt, defaultValue);
+    }
+
+    private <T> T getParam(final String rawValue, final Function<String, T> converter, final T defaultValue) {
+        if (rawValue == null) {
+            return defaultValue;
+        }
+
+        return converter.apply(rawValue);
     }
 
     private SourceToTarget computeSourceToTargetForMoveAndCopy(final SFVFSFileSystem sfvfsFileSystem, final SFVFSPath sfvfsSourcePath, final SFVFSPath sfvfsTargetPath) throws IOException {
