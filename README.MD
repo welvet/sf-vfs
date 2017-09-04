@@ -142,4 +142,6 @@ The most impact goes to CPU. Besides IOUtils there is Input and Output streams i
 
 ## How to build ##
 
-TBD
+Use maven 3.0.3 to build library:
+
+`maven clean install`
