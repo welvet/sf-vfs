@@ -1,7 +1,7 @@
 package sfvfs.internal;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -10,25 +10,26 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
 
 /**
  * @author alexey.kutuzov
  */
-class DataBlocksTest {
+public class DataBlocksTest {
 
     private DataBlocks dataBlocks;
     private File tempFile;
 
-    @BeforeEach
-    void setUp() throws IOException {
+    @Before
+    public void setUp() throws IOException {
         tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
         dataBlocks = new DataBlocks(tempFile, 64, 1, "rw", 10 * 1024, 100);
     }
 
     @Test
-    void simpleAllocateAndDeallocateBlock() throws IOException {
+    public void simpleAllocateAndDeallocateBlock() throws IOException {
         final DataBlocks.Block block = dataBlocks.allocateBlock();
         assertNotNull(block);
 
@@ -40,7 +41,7 @@ class DataBlocksTest {
     }
 
     @Test
-    void allocateAndDeallocateMultipleBlocks() throws IOException {
+    public void allocateAndDeallocateMultipleBlocks() throws IOException {
         final List<DataBlocks.Block> blocks = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             blocks.add(dataBlocks.allocateBlock());
@@ -65,7 +66,7 @@ class DataBlocksTest {
     }
 
     @Test
-    void reinitializeBlocks() throws IOException {
+    public void reinitializeBlocks() throws IOException {
         for (int i = 0; i < 100; i++) {
             dataBlocks.allocateBlock();
         }
@@ -80,7 +81,7 @@ class DataBlocksTest {
     }
 
     @Test
-    void writeAndReadData() throws IOException {
+    public void writeAndReadData() throws IOException {
         final DataBlocks.Block block = dataBlocks.allocateBlock();
         block.write(new byte[]{1, 2, 3, 4});
 
@@ -92,7 +93,7 @@ class DataBlocksTest {
     }
 
     @Test
-    void compact() throws IOException {
+    public void compact() throws IOException {
         final Random r = new Random();
         int total = 0;
         final List<Integer> allocatedBlocks = new ArrayList<>();

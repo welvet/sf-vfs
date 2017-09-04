@@ -1,7 +1,7 @@
 package sfvfs;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,17 +17,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.*;
 
 /**
  * @author alexey.kutuzov
  */
-class SFVFSFilesystemTest {
+public class SFVFSFilesystemTest {
 
     private File dataFile;
 
-    @BeforeEach
-    void setUp() throws IOException {
+    @Before
+    public void setUp() throws IOException {
         dataFile = File.createTempFile("sfvfs", ".dat");
         assertTrue(dataFile.delete());
 
@@ -35,21 +35,21 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void createRootPath() {
+    public void createRootPath() {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
         assertTrue(Files.exists(path));
         assertTrue(Files.isDirectory(path));
     }
 
     @Test
-    void nonExistingPathNotExists() {
+    public void nonExistingPathNotExists() {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/notextists"));
         assertFalse(Files.exists(path));
         assertFalse(Files.isDirectory(path));
     }
 
     @Test
-    void createEmptyDir() throws IOException {
+    public void createEmptyDir() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/new_dir/ab/asb/s"));
         assertFalse(Files.exists(path));
         assertFalse(Files.isDirectory(path));
@@ -61,7 +61,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void createExistingDir() throws IOException {
+    public void createExistingDir() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/notextists"));
 
         Files.createDirectory(path);
@@ -72,7 +72,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void deleteDir() throws IOException {
+    public void deleteDir() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/notextists"));
 
         Files.createDirectory(path);
@@ -83,7 +83,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void deleteAndRecreateDir() throws IOException {
+    public void deleteAndRecreateDir() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/notextists"));
 
         Files.createDirectory(path);
@@ -95,7 +95,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void cantDeleteDirWithData() throws IOException {
+    public void cantDeleteDirWithData() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/new_dir/ab/asb/s"));
         final Path parentDir = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/new_dir"));
 
@@ -109,14 +109,14 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void fileCreate() throws IOException {
+    public void fileCreate() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/test.txt"));
         Files.write(path, "abc".getBytes(), StandardOpenOption.CREATE_NEW);
         assertEquals("abc", Files.readAllLines(path).get(0));
     }
 
     @Test
-    void fileAppend() throws IOException {
+    public void fileAppend() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/test.txt"));
         Files.write(path, "abc".getBytes(), StandardOpenOption.CREATE_NEW);
         Files.write(path, "d".getBytes(), StandardOpenOption.APPEND);
@@ -124,7 +124,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void fileOverwrite() throws IOException {
+    public void fileOverwrite() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/test.txt"));
         Files.write(path, "abc".getBytes(), StandardOpenOption.CREATE_NEW);
         Files.write(path, "d".getBytes(), StandardOpenOption.WRITE);
@@ -132,7 +132,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void filesWalk() throws IOException {
+    public void filesWalk() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/new_dir/ab/asb/s"));
         Files.createDirectory(path);
 
@@ -164,7 +164,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void moveFileDirectly() throws IOException {
+    public void moveFileDirectly() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -183,7 +183,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void moveFileToExistingDirectory() throws IOException {
+    public void moveFileToExistingDirectory() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -202,7 +202,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void cantMoveIfNoParent() throws IOException {
+    public void cantMoveIfNoParent() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -220,7 +220,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void cantMoveIfNoSource() throws IOException {
+    public void cantMoveIfNoSource() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -237,7 +237,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void cantMoveIfAlreadyExists() throws IOException {
+    public void cantMoveIfAlreadyExists() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -257,7 +257,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void cantMoveIfNoSourceParent() throws IOException {
+    public void cantMoveIfNoSourceParent() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         final Path aDir = path.resolve("a");
@@ -273,7 +273,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void copyFile() throws IOException {
+    public void copyFile() throws IOException {
         final Path root = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/"));
 
         Files.write(root.resolve("a.txt"), "abc".getBytes(), StandardOpenOption.CREATE_NEW);
@@ -289,7 +289,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void copyDir() throws IOException {
+    public void copyDir() throws IOException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/origin_dir/ab/asb/s"));
         Files.createDirectory(path);
 
@@ -335,7 +335,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void differentThreadAccessProhibited() throws IOException, InterruptedException {
+    public void differentThreadAccessProhibited() throws IOException, InterruptedException {
         final Path path = Paths.get(URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/origin_dir"));
 
         final Future<?> result = Executors.newSingleThreadExecutor().submit(() -> {
@@ -354,7 +354,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void closeAndOpenFS() throws IOException {
+    public void closeAndOpenFS() throws IOException {
         final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + ":/");
 
         final Path root = Paths.get(uri);
@@ -370,7 +370,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void passParamInUrl() throws IOException {
+    public void passParamInUrl() throws IOException {
         final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=5:/");
         final Path root = Paths.get(uri);
 
@@ -385,7 +385,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void passWrongParamInUrl() {
+    public void passWrongParamInUrl() {
         try {
             final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=0:/");
             final Path root = Paths.get(uri);
@@ -397,7 +397,7 @@ class SFVFSFilesystemTest {
     }
 
     @Test
-    void passMultipleWrongParamsInUrl() {
+    public void passMultipleWrongParamsInUrl() {
         try {
             final URI uri = URI.create("sfvfs:" + dataFile.getAbsolutePath() + "?dirMaxNameLen=10&blockSize=12:/");
             final Path root = Paths.get(uri);
@@ -407,6 +407,5 @@ class SFVFSFilesystemTest {
             assertTrue(ex.getMessage().contains("block size must be power of 2"));
         }
     }
-
 
 }

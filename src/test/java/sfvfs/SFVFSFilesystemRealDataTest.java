@@ -1,8 +1,8 @@
 package sfvfs;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sfvfs.utils.IOUtils;
@@ -22,26 +22,26 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author alexey.kutuzov
  */
-class SFVFSFilesystemRealDataTest {
+public class SFVFSFilesystemRealDataTest {
 
     private static final Logger log = LoggerFactory.getLogger(SFVFSFilesystemRealDataTest.class);
 
     private Random r;
 
-    @BeforeEach
-    void setUp() {
+    @Before
+    public void setUp() {
         r = new Random();
         r.setSeed(0);
     }
 
     @Test
-    void uploadProjectDir() throws IOException {
+    public void uploadProjectDir() throws IOException {
         final Path localfsPath = Paths.get(".");
         final File dataFile = createDataFile();
 
@@ -80,8 +80,8 @@ class SFVFSFilesystemRealDataTest {
     }
 
     @Test
-    @Disabled
-    void pTest() throws IOException {
+    @Ignore
+    public void pTest() throws IOException {
         System.out.println("mem: " + Runtime.getRuntime().maxMemory());
         System.out.println();
 
@@ -162,7 +162,7 @@ class SFVFSFilesystemRealDataTest {
                         } else if (!localPathAttributes.isDirectory() && !sfvfsPathAttributes.isDirectory()) {
                             try (final InputStream localIs = Files.newInputStream(localPath)) {
                                 try (final InputStream sfvfsIs = Files.newInputStream(sfvfsPath)) {
-                                    assertTrue(IOUtils.isEqual(localIs, sfvfsIs, 1024), "streams different for " + relativeLocalPath);
+                                    assertTrue("streams different for " + relativeLocalPath, IOUtils.isEqual(localIs, sfvfsIs, 1024));
                                 }
                             }
 

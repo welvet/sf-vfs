@@ -1,7 +1,7 @@
 package sfvfs.internal;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,21 +13,21 @@ import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.*;
 import static sfvfs.utils.Streams.iteratorToStream;
 import static sfvfs.utils.StringUtils.generateEnLetters;
 
 /**
  * @author alexey.kutuzov
  */
-class DirectoryTest {
+public class DirectoryTest {
 
     private Random r;
     private DataBlocks dataBlocks;
     private File tempFile;
 
-    @BeforeEach
-    void setUp() throws IOException {
+    @Before
+    public void setUp() throws IOException {
         tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
         dataBlocks = new DataBlocks(tempFile, 64, 2, "rw", 10 * 1024, 100);
@@ -35,7 +35,7 @@ class DirectoryTest {
     }
 
     @Test
-    void createSimpleDirectoryAddAndListEntity() throws IOException {
+    public void createSimpleDirectoryAddAndListEntity() throws IOException {
         final Directory directory = createDirectory();
         directory.addEntity("test", 1234, new Flags.DirectoryListEntityFlags());
 
@@ -50,7 +50,7 @@ class DirectoryTest {
     }
 
     @Test
-    void simpleDelete() throws IOException {
+    public void simpleDelete() throws IOException {
         final Directory directory = createDirectory();
         directory.addEntity("test", 1234, new Flags.DirectoryListEntityFlags());
 
@@ -65,7 +65,7 @@ class DirectoryTest {
     }
 
     @Test
-    void flags() throws IOException {
+    public void flags() throws IOException {
         final Directory directory = createDirectory();
         final Flags.DirectoryListEntityFlags flags = new Flags.DirectoryListEntityFlags();
         flags.setDirectory(true);
@@ -74,7 +74,7 @@ class DirectoryTest {
     }
 
     @Test
-    void addMultipleEntitiesFixedLen() throws IOException {
+    public void addMultipleEntitiesFixedLen() throws IOException {
         for (int i = 1; i < 30; i++) {
 
             final Directory directory = createDirectory();
@@ -98,7 +98,7 @@ class DirectoryTest {
     }
 
     @Test
-    void addMultipleEntitiesRandomLen() throws IOException {
+    public void addMultipleEntitiesRandomLen() throws IOException {
         final Directory directory = createDirectory();
         final Map<String, Integer> existing = new HashMap<>();
 
@@ -119,17 +119,17 @@ class DirectoryTest {
     }
 
     @Test
-    void addAndDeleteMultipleEntitiesNoIndex() throws IOException {
+    public void addAndDeleteMultipleEntitiesNoIndex() throws IOException {
         checkAddDeleteMultipleEntities(createDirectory());
     }
 
     @Test
-    void addAndDeleteMultipleEntitiesIndexed() throws IOException {
+    public void addAndDeleteMultipleEntitiesIndexed() throws IOException {
         checkAddDeleteMultipleEntities(createDirectory(10));
     }
 
     @Test
-    void addALotEntitiesToIndexedDir() throws IOException {
+    public void addALotEntitiesToIndexedDir() throws IOException {
         final DataBlocks dataBlocks = new DataBlocks(tempFile, 1024, 2, "rw", 10 * 1024, 100);
 
         final DataBlocks.Block block = dataBlocks.allocateBlock();
@@ -160,7 +160,7 @@ class DirectoryTest {
     }
 
     @Test
-    void deleteDirectory() throws IOException {
+    public void deleteDirectory() throws IOException {
         final Directory directory = createDirectory();
 
         for (int j = 1; j < 1000; j++) {

@@ -1,7 +1,7 @@
 package sfvfs.internal;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,19 +11,19 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.*;
 import static sfvfs.utils.StringUtils.generateText;
 
 /**
  * @author alexey.kutuzov
  */
-class InodeTest {
+public class InodeTest {
 
     private Random r;
     private DataBlocks dataBlocks;
 
-    @BeforeEach
-    void setUp() throws IOException {
+    @Before
+    public void setUp() throws IOException {
         final File tempFile = File.createTempFile("sfvsf", ".dat");
         tempFile.deleteOnExit();
         dataBlocks = new DataBlocks(tempFile, 64, 2, "rw", 100 * 1024, 100);
@@ -31,7 +31,7 @@ class InodeTest {
     }
 
     @Test
-    void simpleReadAndWriteInode() throws IOException {
+    public void simpleReadAndWriteInode() throws IOException {
         final Inode inode = newInode();
         assertEquals(0, inode.getSize());
 
@@ -42,7 +42,7 @@ class InodeTest {
     }
 
     @Test
-    void longTextWriteAndRead() throws IOException {
+    public void longTextWriteAndRead() throws IOException {
         for (int i = 0; i < 1_000; i ++) {
             r.setSeed(i);
 
@@ -62,7 +62,7 @@ class InodeTest {
     }
 
     @Test
-    void longTextWriteAndReadInodeClear() throws IOException {
+    public void longTextWriteAndReadInodeClear() throws IOException {
         final Inode inode = newInode();
         for (int i = 0; i < 1_000; i ++) {
             r.setSeed(i);
@@ -71,7 +71,7 @@ class InodeTest {
             inode.clear();
             printInodes(inode);
             final int takenBlocks = dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks();
-            assertTrue(6 >= takenBlocks, takenBlocks + "");
+            assertTrue(takenBlocks + "", 6 >= takenBlocks);
 
             final String generatedText = generateText(r, i);
 
@@ -88,14 +88,14 @@ class InodeTest {
     }
 
     @Test
-    void longTextWriteAndReadInodeDelete() throws IOException {
+    public void longTextWriteAndReadInodeDelete() throws IOException {
         for (int i = 0; i < 1_000; i ++) {
             r.setSeed(i);
             System.out.println("Checking " + i);
 
             final Inode inode = newInode();
             final int takenBlocks = dataBlocks.getTotalBlocks() - dataBlocks.getFreeBlocks();
-            assertTrue(6 >= takenBlocks, takenBlocks + "");
+            assertTrue(takenBlocks + "", 6 >= takenBlocks);
 
             final String generatedText = generateText(r, i);
 
@@ -114,7 +114,7 @@ class InodeTest {
     }
 
     @Test
-    void appendBlockSizeText() throws IOException {
+    public void appendBlockSizeText() throws IOException {
         final Inode inode = newInode();
 
         final StringBuilder completeText = new StringBuilder();
@@ -136,7 +136,7 @@ class InodeTest {
     }
 
     @Test
-    void appendToExistingFile() throws IOException {
+    public void appendToExistingFile() throws IOException {
         final Inode inode = newInode();
 
         final StringBuilder completeText = new StringBuilder();
@@ -158,7 +158,7 @@ class InodeTest {
     }
 
     @Test
-    void appendBinary() throws IOException {
+    public void appendBinary() throws IOException {
         final Inode inode = newInode();
 
         int sum = 0;
@@ -193,7 +193,7 @@ class InodeTest {
     }
 
     @Test
-    void multipleFlush() throws IOException {
+    public void multipleFlush() throws IOException {
         final Inode inode = newInode();
 
         final StringBuilder completeText = new StringBuilder();
@@ -217,7 +217,7 @@ class InodeTest {
     }
 
     @Test
-    void creatingMultipleStreamsWithoutClosingFails() throws IOException {
+    public void creatingMultipleStreamsWithoutClosingFails() throws IOException {
         final Inode inode = newInode();
         final OutputStream outputStream = inode.appendStream();
         try {
@@ -261,7 +261,6 @@ class InodeTest {
         return new Inode(dataBlocks, block.getAddress());
     }
 
-
     private void printInodes(final Inode inode) throws IOException {
         Inode in = inode;
 
@@ -276,4 +275,5 @@ class InodeTest {
             }
         }
     }
+
 }
