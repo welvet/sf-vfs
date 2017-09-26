@@ -98,6 +98,38 @@ public class DirectoryTest {
     }
 
     @Test
+    public void addAndRemoveMultipleEntitiesFixedLen() throws IOException {
+        for (int i = 1; i < 30; i++) {
+
+            final Directory directory = createDirectory();
+            final Map<String, Integer> existing = new HashMap<>();
+
+            for (int j = 0; j < 1000; j++) {
+                r.setSeed(i * j);
+
+                final String name = generateEnLetters(r, i);
+                if (existing.containsKey(name)) {
+                    continue;
+                }
+
+                existing.put(name, i * j + 1);
+                directory.addEntity(name, i * j + 1, new Flags.DirectoryListEntityFlags());
+
+                if (!existing.isEmpty()) {
+                    final Iterator<Map.Entry<String, Integer>> entryIterator = existing.entrySet().iterator();
+                    final Map.Entry<String, Integer> entry = entryIterator.next();
+                    directory.removeEntity(entry.getKey());
+                    entryIterator.remove();
+                }
+
+                validateDirectoryListing(directory, existing);
+            }
+
+            System.out.println(directory);
+        }
+    }
+
+    @Test
     public void addMultipleEntitiesRandomLen() throws IOException {
         final Directory directory = createDirectory();
         final Map<String, Integer> existing = new HashMap<>();

@@ -253,7 +253,7 @@ public class Directory {
 
         final int bucketSize = Integer.MAX_VALUE / (lastEntityListInRootBlock - FIRST_ENTITY_LIST_BLOCK_IDX);
 
-        final int result = (nameHashCode / bucketSize) + FIRST_ENTITY_LIST_BLOCK_IDX;
+        final int result = (int) Math.round (((double)nameHashCode / bucketSize) + FIRST_ENTITY_LIST_BLOCK_IDX);
 
         checkState(result >= FIRST_ENTITY_LIST_BLOCK_IDX && result <= lastEntityListInRootBlock,
                 "unexpected block id %s for %s", result, name);
@@ -326,7 +326,7 @@ public class Directory {
                                 break;
                             } else {
                                 final int nextListBlockAddress = currentListBlockData.getInt(NEXT_BLOCK_IDX * PTRLEN);
-                                if (nextListBlockAddress != 0) {
+                                if (nextListBlockAddress != NULL_POINTER) {
                                     currentListBlock = dataBlocks.getBlock(nextListBlockAddress);
                                 } else {
                                     currentListBlock = null;
@@ -383,7 +383,7 @@ public class Directory {
                 }
 
                 final int nextListBlockAddress = currentListBlockData.getInt(NEXT_BLOCK_IDX * PTRLEN);
-                if (nextListBlockAddress != 0) {
+                if (nextListBlockAddress != NULL_POINTER) {
                     currentListBlock = dataBlocks.getBlock(nextListBlockAddress);
                 } else {
                     final DataBlocks.Block newBlock = dataBlocks.allocateBlock();
@@ -405,28 +405,41 @@ public class Directory {
         }
 
         void remove(final String name) throws IOException {
-            final Iterator<DirectoryEntity> entityIterator = listEntities();
-            Node node = null;
+            Node node;
+            DataBlocks.Block prevListBlock = null;
+            DataBlocks.Block currentListBlock = entityListRootBlock;
+            ByteBuffer currentListBlockData = ByteBuffer.wrap(currentListBlock.read());
 
-            while (entityIterator.hasNext()) {
-                final DirectoryEntity entity = entityIterator.next();
-                if (entity.getName().equals(name)) {
-                    node = (Node) entity;
-                    break;
+            int addressInListBlock = FIRST_ENTITY_ADDRESS;
+            while (true) {
+                node = readNodeIfExists(currentListBlock.getAddress(), currentListBlockData, addressInListBlock);
+
+                if (node == null) {
+                    final int nextListBlockAddress = currentListBlockData.getInt(NEXT_BLOCK_IDX * PTRLEN);
+
+                    if (nextListBlockAddress == NULL_POINTER) {
+                        log.debug("not found for remove {} in {}", name, rootBlock.getAddress());
+                        return;
+                    }
+
+                    prevListBlock = currentListBlock;
+
+                    currentListBlock = dataBlocks.getBlock(nextListBlockAddress);
+                    currentListBlockData = ByteBuffer.wrap(currentListBlock.read());
+                    addressInListBlock = FIRST_ENTITY_ADDRESS;
+                } else {
+                    if (node.getName().equals(name)) {
+                        break;
+                    }
+
+                    addressInListBlock += node.length() + 1;
                 }
             }
 
-            if (node == null) {
-                log.debug("not found for remove {} in {}", name, rootBlock.getAddress());
-                return;
-            }
-
-            final DataBlocks.Block currentListBlock = dataBlocks.getBlock(node.entityNodeListAddress);
-            final ByteBuffer currentListBlockData = ByteBuffer.wrap(currentListBlock.read());
             int addressInCurrentListBlock = FIRST_ENTITY_ADDRESS;
+            int addressInNewListBlock = FIRST_ENTITY_ADDRESS;
 
             final ByteBuffer listBlockNewData = ByteBuffer.wrap(new byte[currentListBlock.size()]);
-            int addressInNewListBlock = FIRST_ENTITY_ADDRESS;
 
             while (true) {
                 final Node anotherNode = readNodeIfExists(currentListBlock.getAddress(), currentListBlockData, addressInCurrentListBlock);
@@ -442,7 +455,7 @@ public class Directory {
                 addressInCurrentListBlock += anotherNode.length() + 1;
             }
 
-            if (currentListBlock.getAddress() == entityListRootBlock.getAddress() || addressInNewListBlock != FIRST_ENTITY_ADDRESS) {
+            if (prevListBlock == null || addressInNewListBlock != FIRST_ENTITY_ADDRESS) {
                 listBlockNewData.putInt(SIZE_IDX * PTRLEN, currentListBlockData.getInt(SIZE_IDX * PTRLEN));
                 listBlockNewData.putInt(NEXT_BLOCK_IDX * PTRLEN, currentListBlockData.getInt(NEXT_BLOCK_IDX * PTRLEN));
                 currentListBlock.write(listBlockNewData.array());
@@ -451,16 +464,7 @@ public class Directory {
             } else {
                 final int currentBlockNextBlockAddress = currentListBlockData.getInt(NEXT_BLOCK_IDX * PTRLEN);
 
-                DataBlocks.Block prevListBlock = entityListRootBlock;
-                while (true) {
-                    final int prevBlockNextAddress = prevListBlock.readInt(NEXT_BLOCK_IDX * PTRLEN);
-                    if (prevBlockNextAddress == currentListBlock.getAddress()) {
-                        prevListBlock.writeInt(NEXT_BLOCK_IDX * PTRLEN, currentBlockNextBlockAddress);
-                        break;
-                    } else {
-                        prevListBlock = dataBlocks.getBlock(prevBlockNextAddress);
-                    }
-                }
+                prevListBlock.writeInt(NEXT_BLOCK_IDX * PTRLEN, currentBlockNextBlockAddress);
 
                 dataBlocks.deallocateBlock(currentListBlock.getAddress());
                 log.debug("- entity {} with list part, list={} prev={} next={} gone={}",
